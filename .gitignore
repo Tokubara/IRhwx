@@ -1,0 +1,11 @@
+.vscode/
+__pycache__/
+*.log
+**/*.pdf
+wordvec/
+.idea
+*.txt
+sentence_id
+Sogou0012
+*.md
+report
