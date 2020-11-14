@@ -163,20 +163,9 @@ class SearchEngine:
     def query_pos_filter(self, res_body, query_str, within=np.inf, fix=False):
         '''仅在开启位置过滤时才会调用'''
         # keywords是已经split过的列表
-        keywords = set(query_str.split(' '))
+        keywords = query_str.split(' ')
         n=len(keywords)
-        def dfs(k, a, b):
-            print(a)
-            if (k == n):
-                for i in range(n - 1):
-                    if not (b[i + 1] - b[i] > 0 and b[i + 1] - b[i] <= (within + 1)):
-                        return
-                # ans.append(b[:])
-                return True
-            else:
-                for i in a[k]:
-                    b[k] = i
-                    dfs(k + 1, a, b)
+
 
         # 先得到可能的结果列表
         filter_res=[]
@@ -191,7 +180,22 @@ class SearchEngine:
                 else:
                     pos_list.append([i for i,j in enumerate(res["_source"]["words"]) if j == keyword])
             b=[0 for _ in range(n)]
-            if(dfs(0,pos_list,b)):
+            # print(pos_list)
+            ans=[]
+            def dfs(k, b,ans):
+                # print(pos_list)
+                if (k == n):
+                    for i in range(n - 1):
+                        if not (b[i + 1] - b[i] > 0 and b[i + 1] - b[i] <= (within + 1)):
+                            return
+                    ans.append(b[:])
+                    # return True
+                else:
+                    for i in pos_list[k]:
+                        b[k] = i
+                        dfs(k + 1,b,ans)
+            dfs(0, b, ans)
+            if(len(ans)>0):
                 filter_res.append(res)
         return filter_res
 
