@@ -185,6 +185,8 @@ class SearchEngine:
             def dfs(k, b,ans):
                 # print(pos_list)
                 if (k == n):
+                    if not fix:
+                        b.sort()
                     for i in range(n - 1):
                         if not (b[i + 1] - b[i] > 0 and b[i + 1] - b[i] <= (within + 1)):
                             return
@@ -269,10 +271,10 @@ class SearchEngine:
 if __name__=='__main__':
     my_es = SearchEngine(sentence_log='sentence_id',index_name="full-index")
     # 检测排序
-    query_str = "微粒/n 灰尘/n 细菌/n"
+    query_str = "细菌/n 微粒/n 灰尘/n"
     query_dict = my_es.get_query_dict(query_str,pos=True)
     res_body = my_es.get_query_res(query_dict)
-    filter_res=my_es.query_pos_filter(res_body,query_str,within=2)
+    filter_res=my_es.query_pos_filter(res_body,query_str,within=2,fix=True)
     print(len(filter_res))
     # sort_res = my_es.sort_query(res_body, query_str,method="TF-IDF")
     # print(sort_res[:10])
