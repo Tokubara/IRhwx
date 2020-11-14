@@ -149,7 +149,8 @@ class SearchEngine:
 
     def get_query_res(self, query_dict, size=500):
         res = self.es.search(index=self.index_name, body=query_dict, size=size)
-        return res['hits']['total']['value'], res['hits']['hits']
+        # assert res['hits']['total']['value']==len(res['hits']['hits']), "长度不相等"
+        return res['hits']['hits']
     def keyword_hit_num(self,keyword):
         '''返回一个词在index中总共出现的次数,既支持含有pose的, 又支持不含有pose的'''
         # bug:本来"minimum_should_match": 1, 在should为空的情况下, 是一个也不会返回的
@@ -161,15 +162,12 @@ class SearchEngine:
             query['query']['bool']['filter'].append({'match': {'words': keyword}})
         return self.es.search(index=self.index_name, body=query)['hits']['total']['value']
 
-    def sort_query(self,res_body,res_num,query_str,method="TF-IDF"):
+    def sort_query(self,res_body,query_str,method="TF-IDF"):
         '''query_str是用户直接搜索的字符串, 返回是np数组, 是result索引的一个列表'''
-
-        # for doc in res_body:
-        # TODO 好像res_num是多余的吧
         # TODO 如果关键词重复怎么办?
+        res_num=len(res_body)
         keywords = query_str.split(' ')
         keywords_num=len(keywords)
-        # tf_idf = np.zeros(shape=(keywords_num, res_num))
         if method=="TF-IDF":
             idf = np.zeros(shape=(keywords_num))
             tf = np.zeros(shape=(keywords_num, res_num))
@@ -177,11 +175,12 @@ class SearchEngine:
                 hit_num_corpus=self.keyword_hit_num(keywords[i])
                 idf[i] = np.log(self.docs_num / hit_num_corpus) # TODO 这里可以优化的, 目前为了可读性
                 for j in range(res_num):
-                    hit_num_in_doc=res_body[j]["words"].count(keywords[i].rsplit('/')[0])
-                    tf[i][j]=hit_num_in_doc/len(res_body[j]["words"])
+                    hit_num_in_doc=res_body[j]["_source"]["words"].count(keywords[i].rsplit('/')[0]) # bug: res_body[j]["words"]是错的, 应该是res_body[j]["_source"]["words"]
+                    tf[i][j]=hit_num_in_doc/len(res_body[j]["_source"]["words"])
             tf_idf=tf*idf[:,np.newaxis]
             res_tf_idf=np.sum(tf_idf,axis=0)
-            return (-res_tf_idf).argsort()
+            sort_res= (-res_tf_idf).argsort()
+            return sort_res
 
     def get_docs_num(self):
         # TODO 每次更新, 需要再次调用这个函数
@@ -196,7 +195,12 @@ class SearchEngine:
 
 
 if __name__=='__main__':
-    indexCreater = SearchEngine(sentence_log='sentence_id',index_name="full-index")
+    my_es = SearchEngine(sentence_log='sentence_id',index_name="full-index")
+    query_str = "毫米/q 加工/v"
+    query_dict = my_es.get_query_dict(query_str)
+    res_body = my_es.get_query_res(query_dict)
+    sort_res = my_es.sort_query(res_body, query_str)
+    print(sort_res)
     # indexCreater.create_index()
     # indexCreater.index_file("tmp_output.txt") # 错误处理
 
