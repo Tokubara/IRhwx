@@ -1,19 +1,24 @@
 maps =  {"mappings": {
-            "properties": {
-                "text": {
-                    "type": "keyword",
-                },
-                "poses": {
-                    "type": "keyword",
-                }
-            }
-        }
+
+  "properties": {
+    "origin": {
+      "type": "keyword"
+    },
+    "words":{
+      "type": "keyword"
+    },
+    "words_poses": {
+      "type": "keyword"
+    }
+  }
+}
+
     }
 
 query_template = {
         "query": {
             'bool': {
-                "must":[]
+                "should":[]
             }
         }
     }

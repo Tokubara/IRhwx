@@ -9,33 +9,32 @@ import gc
 import re
 
 class SearchEngine:
-    def __init__(self, files=None, wrong_log='wrong.log', sentence_log='sentence_id', index_name='search-index'):
+    def __init__(self, wrong_log='wrong.log', sentence_log='sentence_id', index_name='test-index'):
         self.es = Elasticsearch()
-        self.files = files
+        # self.files = [] # 保存处理过的文件名
         self.wrong_log = wrong_log
         self.sentence_log = sentence_log
-        self.sentenc_id = self.read_sentence_id()
+        self.sentence_id = self.read_sentence_id()
         self.maps = maps
         self.index_name = index_name
-        self.stop_words = self.read_stop_words()
+        # self.stop_words = self.read_stop_words() #  不需要stopword
 
-    def read_stop_words(self):
-        stop_words = set()
-        try:
-            with open('stop_words.txt', 'r') as f:
-                for linenum, line in enumerate(f):
-                    line = line.strip()
-                    if line == '':
-                        continue
-                    stop_words.add(line)
-        except FileNotFoundError as e:
-            print("Can't find stop words dictionary!")
-        return stop_words
+    # def read_stop_words(self):
+    #     #     stop_words = set()
+    #     #     try:
+    #     #         with open('stop_words.txt', 'r') as f:
+    #     #             for linenum, line in enumerate(f):
+    #     #                 line = line.strip()
+    #     #                 if line == '':
+    #     #                     continue
+    #     #                 stop_words.add(line)
+    #     #     except FileNotFoundError as e:
+    #     #         print("Can't find stop words dictionary!")
+    #     #     return stop_words
 
     def delete_index(self, index_name):
         self.es.indices.delete(index=index_name, ignore=[400, 404])
         print('Delete index {} succesful!'.format(index_name))
-
 
     def read_sentence_id(self):
         '''用于初始化sentence_id这个变量,其实就是读取文件中的一个数'''
@@ -43,41 +42,53 @@ class SearchEngine:
             with open(self.sentence_log, 'r') as f:
                 return int(f.readline().strip())
         except FileNotFoundError as e:
+            # 不需要创建, 如果需要写, 自然会写
             return 0
 
     def write_sentence_id(self):
+        # 写sentence_id文件
         with open(self.sentence_log, 'w') as f:
-            f.write('{}'.format(self.sentenc_id))
+            f.write('{}'.format(self.sentence_id))
 
     def split_word_pos(self, word_poses):
         '''返回词列表, 和词性列表, 词列表为words, 词性列表为pose'''
         wrong_word = open(self.wrong_log, 'a') # 打开wrong.log文件, 准备写入内容
         words = []
-        poses = []
+        # poses = []
         for word in word_poses:
-            matchObj = re.match(r'(.+)/(.+)$', word)
-            try:
-                if matchObj.group(1) in self.stop_words:
-                    continue
-                words.append(matchObj.group(1))
-                poses.append(matchObj.group(2))
-            except AssertionError as e:
-                wrong_word.write('{}\t{}\n'.format(self.sentenc_id, word)) # 会给出是哪一个句子遇到了问题,
+            matchObj = re.match(r'(.+)/.+$', word)
+            # try:
+                # if matchObj.group(1) in self.stop_words:
+                #     continue
+            words.append(matchObj.group(1))
+                # poses.append(matchObj.group(2))
+            # except:
+            #     wrong_word.write('{}\t{}\n'.format(self.sentence_id, word)) # 会给出是哪一个句子遇到了问题,
         wrong_word.close()
-        return words, poses
+        return words
 
     def store_index(self, result):
+        '''其中result是一个列表, 每一个成员是一个列表, 包括了
+        "0秒之内就再次燃烧起来了。"
+        "0秒","之内","就","再次","燃烧","起来","了","。"
+        "0秒/t","之内/f","就/d","再次/d","燃烧/v","起来/v","了/u","。/w"
+        id, id没什么用
+        '''
         action = ({
-                    "_index": self.index_name,
+                    # "_index": self.index_name,
                     "_source": {
-                        'text': row[0], 'poses': row[1]
+                        # 'text': row[0], 'poses': row[1]
+                        'origin': row[0],
+                        'words': row[1],
+                        'words_poses': row[2]
                     },
-                    "_id": row[2]
-                } for row in result) # 得到的是一个generator, 其中
-        helpers.bulk(self.es, action, index="index_new", raise_on_error=True) #? 奇怪的是index参数是干啥的
-        self.write_sentence_id() # 得到的一切正常, 不知道index="index_new"到底起了什么作用
+                    "_id": row[3]
+                } for row in result)
+        helpers.bulk(self.es, action, index=self.index_name, raise_on_error=True)
+        self.write_sentence_id()
 
-    def read_source(self, file_name):
+    def index_file(self, file_name):
+        '''处理一个文件'''
         begin_time = datetime.now()
         with open(file_name) as f:
             print("Begin read {}".format(file_name))
@@ -86,39 +97,44 @@ class SearchEngine:
                 line = line.strip() # 从后面推测来看, line应该长这样"苹果/n 好吃/adj", 而且一个line猜测是对应一条新闻的
                 if line == '':
                     continue
-                line_content = line.split(' ')
-                words, poses = self.split_word_pos(line_content) # word:['苹果','好吃'] poses:['n','adj']
-                result.append([words, poses, self.sentenc_id]) # 把一条新闻的结果添加进去
-                self.sentenc_id += 1
-                if self.sentenc_id % 200000 == 0: # 每隔200000句清空一下这个变量
-                    end_time = datetime.now()
-                    self.store_index(result) # 把这则数据存在es中
-                    del result # 删除一下这个局部变量, 因为它已经存了, 用不到它了
-                    gc.collect() # 但从文章来看, 我总怀疑是多余的, 我怀疑del已经可以了
-                    result = []
-                    time_diff = end_time - begin_time
-                    print("Handle {} sentence! Time Use: {}".format(self.sentenc_id, time_diff))
-            self.store_index(result)
+                words_poses = line.split(' ')
+                try:
+                    words = self.split_word_pos(words_poses) # word:['苹果','好吃'] poses:['n','adj']
+                    result.append([''.join(words), words, words_poses, self.sentence_id]) # 把一条新闻的结果添加进去
+                    self.sentence_id += 1
+                    if self.sentence_id % 200000 == 0: # 每隔200000句清空一下这个变量
+                        end_time = datetime.now()
+                        self.store_index(result) # 把这则数据存在es中
+                        del result # 删除一下这个局部变量, 因为它已经存了, 用不到它了
+                        gc.collect() # 但从文章来看, 我总怀疑是多余的, 我怀疑del已经可以了
+                        result = []
+                        time_diff = end_time - begin_time
+                        print("Handle {} sentence! Time Use: {}".format(self.sentence_id, time_diff))
+                except:
+                    continue
+            self.store_index(result) # 处理剩余的结果
             del result
             gc.collect()
             time_diff = datetime.now() - begin_time
-            print("Read {} over! Handle {} sentence! Time Use: {}".format(file_name, self.sentenc_id, time_diff))
+            print("Read {} over! Handle {} sentence! Time Use: {}".format(file_name, self.sentence_id, time_diff))
+            # sel
 
 
-    def build_index(self):
+    def create_index(self):
         if not self.es.indices.exists(index=self.index_name):
-            result = self.es.indices.create(index=self.index_name, ignore=[400, 404], body = self.maps)
+            self.es.indices.create(index=self.index_name, ignore=[400, 404], body = self.maps)
             print('Create index {}.'.format(self.index_name))
         else:
             print('Find index {}. So don\'t create a new one.'.format(self.index_name))
-        for file_name in self.files:
-            self.read_source(file_name)
-        print("Total sentence number is {}!".format(self.sentenc_id))
+        # for file_name in self.files:
+        #     self.read_source(file_name)
+        # print("Total sentence number is {}!".format(self.sentence_id))
 
     def query(self, keywords, size=500):
-        query = json.loads(json.dumps(query_template))
+        '''keywords是一个列表'''
+        query = json.loads(json.dumps(query_template)) # 似乎确实是多余的
         for keyword in keywords:
-            query['query']['bool']['must'].append({'match': {'text' : keyword}})
+            query['query']['bool']['must'].append({'filter': {'text' : keyword}})
         res = self.es.search(index=self.index_name, body=query, size=size)
         return res['hits']['total']['value'], res['hits']['hits']
 
@@ -126,9 +142,10 @@ class SearchEngine:
 
 
 if __name__=='__main__':
-    indexCreater = SearchEngine(files_to_handle, sentence_log='sentence_id')
+    indexCreater = SearchEngine(sentence_log='sentence_id',index_name="full-index")
+    indexCreater.create_index()
     # indexCreater.delete_index('search-index')
-    indexCreater.build_index()
+    indexCreater.index_file("tmp_output.txt") # 错误处理
     # res = indexCreater.query(query)
     # print("Got %d Hits:" % res['hits']['total']['value'])
     # cnt = 0

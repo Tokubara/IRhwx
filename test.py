@@ -1,6 +1,7 @@
 from elasticsearch import Elasticsearch
 from elasticsearch import helpers
 
+#%% 创建news, 添加几条数据
 es=Elasticsearch()
 es.indices.create(index='news')
 es.create()
@@ -16,6 +17,7 @@ action=({
 } for i in range(3))
 helpers.bulk(es,action)
 
+#%% gc.collect的作用
 import sys
 
 
@@ -71,10 +73,25 @@ gc.collect()
 print(PyObject.from_address(obj_address).refcnt)
 print(PyObject.from_address(lst_address).refcnt)
 
-from elasticsearch import Elasticsearch
-es=Elasticsearch()
-es.search(index="news")
+#%% 测es的检索
+query={
+    "query":{
+        [{"match":{
+            "body":{
+                "query":"喜欢",
+                "operator":"and"
+            }
+        }},
 
-for i in range(False|4):
-    print(i)
+{"match":{
+            "title":{
+                "query":"紫操",
+            }
+        }}
+
+]
+        }
+    }
+
+es.search(index="news",body=query)
 
