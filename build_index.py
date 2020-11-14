@@ -163,18 +163,21 @@ class SearchEngine:
     def query_pos_filter(self, res_body, query_str, within=np.inf, fix=False):
         '''仅在开启位置过滤时才会调用'''
         # keywords是已经split过的列表
-        def dfs(k, a, b, n, ans, within):
+        keywords = set(query_str.split(' '))
+        n=len(keywords)
+        def dfs(k, a, b):
+            print(a)
             if (k == n):
                 for i in range(n - 1):
                     if not (b[i + 1] - b[i] > 0 and b[i + 1] - b[i] <= (within + 1)):
                         return
-                ans.append(b[:])
+                # ans.append(b[:])
+                return True
             else:
                 for i in a[k]:
                     b[k] = i
-                    dfs(k + 1, a, b, n, ans, within)
-        keywords = set(query_str.split(' '))
-        n=len(keywords)
+                    dfs(k + 1, a, b)
+
         # 先得到可能的结果列表
         filter_res=[]
         for res in res_body:
@@ -187,16 +190,10 @@ class SearchEngine:
                     pos_list.append([i for i,j in enumerate(res["_source"]["words_poses"]) if j == keyword])
                 else:
                     pos_list.append([i for i,j in enumerate(res["_source"]["words"]) if j == keyword])
-            b=[0]*n
-            ans=[]
-            dfs(0,pos_list,b,n,ans,within=within)
-            if(len(ans)>0):
+            b=[0 for _ in range(n)]
+            if(dfs(0,pos_list,b)):
                 filter_res.append(res)
         return filter_res
-
-
-
-
 
     def keyword_hit_num(self,keyword):
         '''返回一个词在index中总共出现的次数,既支持含有pose的, 又支持不含有pose的'''
@@ -268,11 +265,13 @@ class SearchEngine:
 if __name__=='__main__':
     my_es = SearchEngine(sentence_log='sentence_id',index_name="full-index")
     # 检测排序
-    query_str = "毫米/q 加工/v"
-    query_dict = my_es.get_query_dict(query_str)
+    query_str = "微粒/n 灰尘/n 细菌/n"
+    query_dict = my_es.get_query_dict(query_str,pos=True)
     res_body = my_es.get_query_res(query_dict)
-    sort_res = my_es.sort_query(res_body, query_str,method="TF-IDF")
-    print(sort_res[:10])
+    filter_res=my_es.query_pos_filter(res_body,query_str,within=2)
+    print(len(filter_res))
+    # sort_res = my_es.sort_query(res_body, query_str,method="TF-IDF")
+    # print(sort_res[:10])
 
     # print(my_es.avgdl)
 
