@@ -4,6 +4,7 @@ from elasticsearch import helpers
 from datetime import datetime
 from config import maps, files_to_handle, query_template, pose_set
 from sys import getrefcount
+from util import get_within_fixed
 import numpy as np
 import json
 import gc
@@ -165,8 +166,6 @@ class SearchEngine:
         # keywords是已经split过的列表
         keywords = query_str.split(' ')
         n=len(keywords)
-
-
         # 先得到可能的结果列表
         filter_res=[]
         for res in res_body:
@@ -262,20 +261,29 @@ class SearchEngine:
         self.avgdl=self.es.search(body=query,size=0)["aggregations"]["avg_size"]["value"]
 
 
-
-
-
-
-
-
 if __name__=='__main__':
-    my_es = SearchEngine(sentence_log='sentence_id',index_name="full-index")
+    query_str="灰尘 微粒/n 细菌/n within=3"
+    se = SearchEngine(sentence_log='sentence_id',index_name="full-index")
+    pos_search=True
+    query_str, within, fixed = get_within_fixed(query_str)
+    query_dict = se.get_query_dict(query_str, pos=pos_search)
+    res_body = se.get_query_res(query_dict)
+    if pos_search:
+        res_body = se.query_pos_filter(res_body, query_str, within=within, fix=fixed)
+    sort_res = se.sort_query(res_body, query_str)
+    res_num = len(res_body)
+    if (res_num > 10):
+        sort_res = sort_res[:10]
+    res_body = [res_body[i] for i in sort_res]
+    print(len(res_body))
+    # render_template('search.html', res_body=res_body, pos_search=pos_search)
     # 检测排序
-    query_str = "细菌/n 微粒/n 灰尘/n"
-    query_dict = my_es.get_query_dict(query_str,pos=True)
-    res_body = my_es.get_query_res(query_dict)
-    filter_res=my_es.query_pos_filter(res_body,query_str,within=2,fix=True)
-    print(len(filter_res))
+    # query_str = "细菌/n 微粒/n 灰尘/n"
+    # query_dict = my_es.get_query_dict(query_str,pos=True)
+    # res_body = my_es.get_query_res(query_dict)
+    # filter_res=my_es.query_pos_filter(res_body,query_str,within=2,fix=True)
+    # print(len(filter_res))
+
     # sort_res = my_es.sort_query(res_body, query_str,method="TF-IDF")
     # print(sort_res[:10])
 

@@ -11,90 +11,52 @@
     {% if message %} {{message}} {% endif %}
     <form method="POST">
         <label>
-            {% if info %}
+{#            {% if query_str %}#}
             <input name="keyword"
                 type="text"
                 class="speech-input"
                 autocomplete="off"
                 placeholder="请输入要查询的关键字"
-                value="{{ info.query }}">
-            </input>
-            {% else %}
-            <input name="keyword"
-                type="text"
-                class="speech-input"
-                autocomplete="off"
-                placeholder="请输入要查询的关键字"> {# 如果没有定义info, 就没有value, 这样的话, 岂不是白给? 是不是意味着, info代表着错误情况 #}
-            </input>
-            {% endif %}
+                value="{{ query_str }}">
+{#            {% else %}#}
+{#            <input name="keyword"#}
+{#                type="text"#}
+{#                class="speech-input"#}
+{#                autocomplete="off"#}
+{#                placeholder="请输入要查询的关键字"> {# 如果没有定义info, 就没有value, 这样的话, 岂不是白给? 是不是意味着, info代表着错误情况 #}
+{#            {% endif %}#}
         </label>
-        <br/>
-        <br/>
-        <label>
-            {% if info and info.window != '' %}
-            <input name="window" type="text" class="speech-input" autocomplete="off" placeholder="请输入窗口大小" value="{{ info.window }}"/>
-            {% else %}
-            <input name="window" type="text" class="speech-input" autocomplete="off" placeholder="请输入窗口大小"/>
-            {% endif %}
-        </label>
-        <br/>
-        <br/>
-        <div>
-        <table style="margin:auto">
-            {% for i in range(4) %}
-            <tr>
-                {% for j in range(7) %}
-                {% set current_pos = pos_info.pos[i * 7 + j] %}
-                    {% if pos_info.pos2show[current_pos] %}
-                    <td><input name="poses" type='checkbox'
-                        value={{current_pos}} checked>
-                        {{pos_info.pos2chin[current_pos]}}</input></td>
-{#                    {% else %}#}
-                    <td><input name="poses" type='checkbox'
-                        value={{current_pos}}>
-                        {{pos_info.pos2chin[current_pos]}}</input></td>
-                    {% endif %}
-                {% endfor %}
-            </tr>
-            {% endfor %}
-        </table>
-        </div>
         <br/>
         <div>
             <label style="margin-right: 30px;">
                 <input type="submit" name="Submit" class="searchbutton" value="搜索" />
             </label>
             <label style="margin-left: 30px;">
-                {% if fuzzy %}
-                    <input name='fuzzy' type='checkbox' checked>关联搜索</input>
+                {% if pos_search %}
+                    <input name='pos_search' type='checkbox' checked>位置搜索
                 {% else %}
-                    <input name='fuzzy' type='checkbox'>关联搜索</input>
+                    <input name='pos_search' type='checkbox'>位置搜索
                 {% endif %}
             </label>
         </div>
     </form>
 </div>
-    {% if sim_words %}
-        <div style="margin: 20px; font-weight: bold; margin-top: 0px;">
-            {{ sim_words }}
-        </div>
-    {% endif %}
-    {% if ans %}
+    {% if res_body %}
     <div>
     <table style="margin:auto">
         <tr>
             <th>Rank</th>
-            <th>Word</th>
-            <th>Score</th>
-            <th>Pos</th>
+            <th>News</th>
+{#            <th>Score</th>#}
+{#            <th>Pos</th>#}
         </tr>
-        {% for i in range(ans|length) %}
-        {% set answer = ans[i] %}
+        {% for i in len(res_body) %}
+        {% set res = res_body[i] %}
         <tr>
             <td>{{ i + 1 }}</td>
-            <td>{{ answer.words }}</td>
-            <td>{{ answer.tf }}</td>
-            <td>{{ answer.pos }}</td>
+            <td>{{ res["_source"]["origin"] }}</td>
+{#            <td>{{ answer.tf }}</td>#}
+{#            <td>{{ answer.pos }}</td>#}
         </tr>
         {% endfor %}
     </table>
