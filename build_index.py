@@ -2,7 +2,7 @@ from elasticsearch import Elasticsearch
 from elasticsearch import client
 from elasticsearch import helpers
 from datetime import datetime
-from config import maps, files_to_handle, query_template
+from config import maps, files_to_handle, query_template, pose_set
 from sys import getrefcount
 import numpy as np
 import json
@@ -132,25 +132,72 @@ class SearchEngine:
         #     self.read_source(file_name)
         # print("Total sentence number is {}!".format(self.sentence_id))
 
-    def get_query_dict(self, query_str):
+    def get_query_dict(self, query_str, pos=False):
         '''query_str是用户直接搜索的字符串, 返回是字典'''
-
+        # TODO 把者共函数改为私有函数
         keywords=set(query_str.split(' '))
         query = json.loads(json.dumps(query_template))
         # 没有词性约束
-        query['query']['bool']['minimum_should_match'] = 1
-        for keyword in keywords:
-            if('/' in keyword):
-                query['query']['bool']['should'].append({'match': {'words_poses' : keyword}})
-            else:
-                query['query']['bool']['should'].append({'match': {'words': keyword}})
+        if not pos:
+            query['query']['bool']['minimum_should_match'] = 1
+            for keyword in keywords:
+                if('/' in keyword):
+                    query['query']['bool']['should'].append({'match': {'words_poses' : keyword}})
+                else:
+                    query['query']['bool']['should'].append({'match': {'words': keyword}})
+        else:
+            for keyword in keywords:
+                if ('/' in keyword):
+                    query['query']['bool']['must'].append({'match': {'words_poses': keyword}})
+                else:
+                    query['query']['bool']['must'].append({'match': {'words': keyword}})
         return query
         #     query['query']['bool']['must'].append({'filter': {'text' : keyword}})
 
-    def get_query_res(self, query_dict, size=500):
+    def get_query_res(self, query_dict, size=50):
+        '''pos表示打开了位置约束, within表示最多可以间隔的, 比如within=0表示必须紧挨着, fix表示顺序必须是关键词出现的顺序'''
         res = self.es.search(index=self.index_name, body=query_dict, size=size)
         # assert res['hits']['total']['value']==len(res['hits']['hits']), "长度不相等"
         return res['hits']['hits']
+
+    def query_pos_filter(self, res_body, query_str, within=np.inf, fix=False):
+        '''仅在开启位置过滤时才会调用'''
+        # keywords是已经split过的列表
+        def dfs(k, a, b, n, ans, within):
+            if (k == n):
+                for i in range(n - 1):
+                    if not (b[i + 1] - b[i] > 0 and b[i + 1] - b[i] <= (within + 1)):
+                        return
+                ans.append(b[:])
+            else:
+                for i in a[k]:
+                    b[k] = i
+                    dfs(k + 1, a, b, n, ans, within)
+        keywords = set(query_str.split(' '))
+        n=len(keywords)
+        # 先得到可能的结果列表
+        filter_res=[]
+        for res in res_body:
+            pos_list = []
+            res_poses=[word_pose.split('/')[1] for word_pose in res["_source"]["words_poses"]]
+            for keyword in keywords: # 找出满足约束的位置
+                if keyword in pose_set:
+                    pos_list.append([i for i,j in enumerate(res_poses) if j==keyword])
+                elif '/' in keyword:
+                    pos_list.append([i for i,j in enumerate(res["_source"]["words_poses"]) if j == keyword])
+                else:
+                    pos_list.append([i for i,j in enumerate(res["_source"]["words"]) if j == keyword])
+            b=[0]*n
+            ans=[]
+            dfs(0,pos_list,b,n,ans,within=within)
+            if(len(ans)>0):
+                filter_res.append(res)
+        return filter_res
+
+
+
+
+
     def keyword_hit_num(self,keyword):
         '''返回一个词在index中总共出现的次数,既支持含有pose的, 又支持不含有pose的'''
         # bug:本来"minimum_should_match": 1, 在should为空的情况下, 是一个也不会返回的
