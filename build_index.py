@@ -4,6 +4,7 @@ from elasticsearch import helpers
 from datetime import datetime
 from config import maps, files_to_handle, query_template
 from sys import getrefcount
+import numpy as np
 import json
 import gc
 import re
@@ -11,6 +12,7 @@ import re
 class SearchEngine:
     def __init__(self, wrong_log='wrong.log', sentence_log='sentence_id', index_name='test-index'):
         self.es = Elasticsearch()
+        self.get_docs_num()
         # self.files = [] # 保存处理过的文件名
         self.wrong_log = wrong_log
         self.sentence_log = sentence_log
@@ -130,24 +132,81 @@ class SearchEngine:
         #     self.read_source(file_name)
         # print("Total sentence number is {}!".format(self.sentence_id))
 
-    def query(self, keywords, size=500):
-        '''keywords是一个列表'''
-        query = json.loads(json.dumps(query_template)) # 似乎确实是多余的
+    def get_query_dict(self, query_str):
+        '''query_str是用户直接搜索的字符串, 返回是字典'''
+
+        keywords=set(query_str.split(' '))
+        query = json.loads(json.dumps(query_template))
+        # 没有词性约束
+        query['query']['bool']['minimum_should_match'] = 1
         for keyword in keywords:
-            query['query']['bool']['must'].append({'filter': {'text' : keyword}})
-        res = self.es.search(index=self.index_name, body=query, size=size)
+            if('/' in keyword):
+                query['query']['bool']['should'].append({'match': {'words_poses' : keyword}})
+            else:
+                query['query']['bool']['should'].append({'match': {'words': keyword}})
+        return query
+        #     query['query']['bool']['must'].append({'filter': {'text' : keyword}})
+
+    def get_query_res(self, query_dict, size=500):
+        res = self.es.search(index=self.index_name, body=query_dict, size=size)
         return res['hits']['total']['value'], res['hits']['hits']
+    def keyword_hit_num(self,keyword):
+        '''返回一个词在index中总共出现的次数,既支持含有pose的, 又支持不含有pose的'''
+        # bug:本来"minimum_should_match": 1, 在should为空的情况下, 是一个也不会返回的
+        query = json.loads(json.dumps(query_template))
+        query["size"] = 0
+        if '/' in keyword:
+            query['query']['bool']['filter'].append({'match': {'words_poses': keyword}})
+        else:
+            query['query']['bool']['filter'].append({'match': {'words': keyword}})
+        return self.es.search(index=self.index_name, body=query)['hits']['total']['value']
+
+    def sort_query(self,res_body,res_num,query_str,method="TF-IDF"):
+        '''query_str是用户直接搜索的字符串, 返回是np数组, 是result索引的一个列表'''
+
+        # for doc in res_body:
+        # TODO 好像res_num是多余的吧
+        # TODO 如果关键词重复怎么办?
+        keywords = query_str.split(' ')
+        keywords_num=len(keywords)
+        # tf_idf = np.zeros(shape=(keywords_num, res_num))
+        if method=="TF-IDF":
+            idf = np.zeros(shape=(keywords_num))
+            tf = np.zeros(shape=(keywords_num, res_num))
+            for i in range(keywords_num):
+                hit_num_corpus=self.keyword_hit_num(keywords[i])
+                idf[i] = np.log(self.docs_num / hit_num_corpus) # TODO 这里可以优化的, 目前为了可读性
+                for j in range(res_num):
+                    hit_num_in_doc=res_body[j]["words"].count(keywords[i].rsplit('/')[0])
+                    tf[i][j]=hit_num_in_doc/len(res_body[j]["words"])
+            tf_idf=tf*idf[:,np.newaxis]
+            res_tf_idf=np.sum(tf_idf,axis=0)
+            return (-res_tf_idf).argsort()
+
+    def get_docs_num(self):
+        # TODO 每次更新, 需要再次调用这个函数
+        self.docs_num=self.es.count()["count"]
+
+
+
+
+
 
 
 
 
 if __name__=='__main__':
     indexCreater = SearchEngine(sentence_log='sentence_id',index_name="full-index")
-    indexCreater.create_index()
-    # indexCreater.delete_index('search-index')
-    indexCreater.index_file("tmp_output.txt") # 错误处理
+    # indexCreater.create_index()
+    # indexCreater.index_file("tmp_output.txt") # 错误处理
+
+    # import timeit
+    # print(indexCreater.keyword_hit_num())
+    # print(indexCreater.docs_num)
+    # query_str = "意竹/n"
+    # print(json.dumps(query(query_str)))
     # res = indexCreater.query(query)
-    # print("Got %d Hits:" % res['hits']['total']['value'])
+    # print("Got %d Hits:" % requery['query']['bool']['minimum_should_match']=1s['hits']['total']['value'])
     # cnt = 0
     # for hit in res['hits']['hits']:
     #     print(cnt)

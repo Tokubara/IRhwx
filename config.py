@@ -17,8 +17,11 @@ maps =  {"mappings": {
 
 query_template = {
         "query": {
-            'bool': {
-                "should":[]
+            "bool": {
+                "must":[],
+                "should":[],
+                "filter":[],
+                "minimum_should_match" : 0,
             }
         }
     }
