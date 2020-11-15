@@ -2,11 +2,8 @@ from flask import Flask
 from flask import render_template
 from flask import request
 from build_index import SearchEngine
-# from config import files_to_handle
 from util import get_within_fixed
 import numpy as np
-# from word2vec import get_similar_word, load_wordvector
-# import re
 
 se = SearchEngine(index_name='full-index')
 app = Flask(__name__)
@@ -19,8 +16,6 @@ app = Flask(__name__)
 
 def transfer_checkbox(value):
     return value is not None
-
-
 
 @app.route('/', methods=['GET', 'POST'])
 @app.route('/search', methods=['GET', 'POST'])
@@ -41,19 +36,20 @@ def index(): #? 奇怪的是, 这里不是dynamic pattern,为什么有name参数
             if not within:
                 within=np.inf
             res_body = se.query_pos_filter(res_body, query_str, within=within, fix=fixed)
-        sort_res = se.sort_query(res_body, query_str, method=method)
         res_num = len(res_body)
-        if (res_num > 10):
-            sort_res = sort_res[:10]
-            res_num=10
-        res_body = [res_body[i]["_source"]["origin"] for i in sort_res]
+        no_result = res_num == 0
+        if not no_result:
+            sort_res = se.sort_query(res_body, query_str, method=method)
+            if (res_num > 10):
+                sort_res = sort_res[:10]
+                res_num=10
+            res_body = [res_body[i]["_source"]["origin"] for i in sort_res]
         # print("res_num={}".format(res_num))
         # print(res_body)
         # for i,j in enumerate(res_body):
         #     print("{} {}".format(i+1,j))
-        return render_template('search.html', res_body=res_body, is_strict=is_strict, query_str=old_query_str, res_num=res_num, is_tf_idf=is_tf_idf)
+        return render_template('search.html', res_body=res_body, is_strict=is_strict, query_str=old_query_str, res_num=res_num, is_tf_idf=is_tf_idf,no_result=no_result)
     return render_template('search.html')
 
 if __name__ == '__main__':
-    # wv = load_wordvector('wordvec')
     app.run()
