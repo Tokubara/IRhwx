@@ -25,32 +25,33 @@ def transfer_checkbox(value):
 @app.route('/', methods=['GET', 'POST'])
 @app.route('/search', methods=['GET', 'POST'])
 def index(): #? 奇怪的是, 这里不是dynamic pattern,为什么有name参数, 猜测是多余的
-    # pos_search = False # 控制是否控制位置搜索
+    # is_strict = False # 控制是否控制位置搜索
     if request.method =='POST': # 这个函数几乎全部都是这里了, 可见主要是如何处理表单
         query_str = request.form['keyword'] # 第一个输入框, 也就是要查询的
         old_query_str=query_str
-        pos_search = transfer_checkbox(request.form.get('pos_search')) #? 是不是这样的, 意味着, 如果checkbox不勾选, 那么返回是None, 否则返回不是None
-
+        is_strict = transfer_checkbox(request.form.get('is_strict')) #? 是不是这样的, 意味着, 如果checkbox不勾选, 那么返回是None, 否则返回不是None
+        is_tf_idf=transfer_checkbox(request.form.get('is_tf_idf'))
+        method="TF-IDF" if is_tf_idf else "BM25"
         # se = SearchEngine(sentence_log='sentence_id', index_name="full-index")
-        # pos_search = True
+        # is_strict = True
         query_str, within, fixed = get_within_fixed(query_str)
-        query_dict = se.get_query_dict(query_str, pos=pos_search)
+        query_dict = se.get_query_dict(query_str, pos=is_strict)
         res_body = se.get_query_res(query_dict)
-        if pos_search:
+        if is_strict:
             if not within:
                 within=np.inf
             res_body = se.query_pos_filter(res_body, query_str, within=within, fix=fixed)
-        sort_res = se.sort_query(res_body, query_str)
+        sort_res = se.sort_query(res_body, query_str, method=method)
         res_num = len(res_body)
         if (res_num > 10):
             sort_res = sort_res[:10]
             res_num=10
         res_body = [res_body[i]["_source"]["origin"] for i in sort_res]
-        print("res_num={}".format(res_num))
+        # print("res_num={}".format(res_num))
         # print(res_body)
-        for i,j in enumerate(res_body):
-            print("{} {}".format(i+1,j))
-        return render_template('search.html', res_body=res_body, pos_search=pos_search,query_str=old_query_str, res_num=res_num)
+        # for i,j in enumerate(res_body):
+        #     print("{} {}".format(i+1,j))
+        return render_template('search.html', res_body=res_body, is_strict=is_strict, query_str=old_query_str, res_num=res_num, is_tf_idf=is_tf_idf)
     return render_template('search.html')
 
 if __name__ == '__main__':

@@ -8,59 +8,59 @@
 <body style="text-align:center">
 <h1>Search Engine for Information Retrieval</h1>
 <div id="Layer1" class="wrapper">
-    {% if message %} {{message}} {% endif %}
+{#    {% if message %} {{message}} {% endif %}#}
     <form method="POST">
         <label>
-{#            {% if query_str %}#}
             <input name="keyword"
                 type="text"
                 class="speech-input"
                 autocomplete="off"
                 placeholder="请输入要查询的关键字"
                 value="{{ query_str }}">
-{#            {% else %}#}
-{#            <input name="keyword"#}
-{#                type="text"#}
-{#                class="speech-input"#}
-{#                autocomplete="off"#}
-{#                placeholder="请输入要查询的关键字"> {# 如果没有定义info, 就没有value, 这样的话, 岂不是白给? 是不是意味着, info代表着错误情况 #}
-{#            {% endif %}#}
+            <input type="submit" name="Submit" class="searchbutton" value="搜索" />
         </label>
         <br/>
         <div>
             <label style="margin-right: 30px;">
-                <input type="submit" name="Submit" class="searchbutton" value="搜索" />
+
             </label>
             <label style="margin-left: 30px;">
-                {% if pos_search %}
-                    <input name='pos_search' type='checkbox' checked>位置搜索
+                {% if is_strict %}
+                    <input name='is_strict' type='checkbox' checked>严格模式
                 {% else %}
-                    <input name='pos_search' type='checkbox'>位置搜索
+                    <input name='is_strict' type='checkbox'>严格模式
+                {% endif %}
+            {% if is_tf_idf %}
+                    <input name='is_tf_idf' type='checkbox' checked>使用TF-IDF
+                {% else %}
+                    <input name='is_tf_idf' type='checkbox'>使用TF-IDF
                 {% endif %}
             </label>
         </div>
     </form>
 </div>
-    {% if res_body %}
+{% if res_num %}
     <div>
-    <table style="margin:auto">
+    <table>
         <tr>
             <th>Rank</th>
             <th>News</th>
 {#            <th>Score</th>#}
 {#            <th>Pos</th>#}
         </tr>
-        {% for i in len(res_body) %}
-        {% set res = res_body[i] %}
+        {% for i in range(res_num) %}
+{#        {% set res = res_body[i] %}#}
         <tr>
             <td>{{ i + 1 }}</td>
-            <td>{{ res["_source"]["origin"] }}</td>
+            <td>{{ res_body[i] }}</td>
 {#            <td>{{ answer.tf }}</td>#}
 {#            <td>{{ answer.pos }}</td>#}
         </tr>
         {% endfor %}
     </table>
     </div>
+        {% else %}
+        <p>没有结果</p>
     {% endif %}
 
 </body>
