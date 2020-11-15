@@ -2,8 +2,7 @@ from elasticsearch import Elasticsearch
 from elasticsearch import client
 from elasticsearch import helpers
 from datetime import datetime
-from config import maps, files, query_template, pose_set
-from sys import getrefcount
+from config import maps, files, query_template, pose_set, index_name
 from util import get_within_fixed
 import numpy as np
 import json
@@ -224,19 +223,7 @@ class SearchEngine:
 
 if __name__=='__main__':
     #%% 构建索引
-    se = SearchEngine(sentence_log='sentence_id', index_name="full-index")
-    # se.create_index()
-    # for file in files:
-    #     se.index_file(file)
-    query_str="微粒 n n fixed=T"
-    query_str, res_body = se.get_filter_query_res(query_str, True)
-    print(res_body)
-    #%% 检测排序结果
-    # query_str = "细菌/n 微粒/n 灰尘/n"
-    # query_dict = my_es.get_query_dict(query_str,pos=True)
-    # res_body = my_es.get_query_res(query_dict)
-    # filter_res=my_es.query_pos_filter(res_body,query_str,within=2,fix=True)
-    # print(len(filter_res))
-
-    # sort_res = my_es.sort_query(res_body, query_str,method="TF-IDF")
-    # print(sort_res[:10])
+    se = SearchEngine(index_name=index_name)
+    se.create_index()
+    for file in files:
+        se.index_file(file)
