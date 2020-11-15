@@ -212,7 +212,7 @@ class SearchEngine:
         return self.es.search(index=self.index_name, body=query)['hits']['total']['value']
 
     def sort_query(self,res_body,query_str,method="BM25",k=1.2,b=0.2):
-        '''query_str是用户直接搜索的字符串, 返回是np数组, 是result索引的一个列表'''
+        '''query_str是用户直接搜索的字符串, 返回是np数组, 是result索引的一个列表, 也返回对应score'''
         # TODO 如果关键词重复怎么办?
         res_num=len(res_body)
         keywords = query_str.split(' ')
@@ -242,7 +242,7 @@ class SearchEngine:
             tf_idf = ktf * idf[:, np.newaxis]
             res_tf_idf = np.sum(tf_idf, axis=0)
             sort_res = (-res_tf_idf).argsort()
-            return sort_res
+            return sort_res, np.sort(res_tf_idf)[::-1]
 
     def get_docs_num(self):
         # TODO 每次更新, 需要再次调用这个函数

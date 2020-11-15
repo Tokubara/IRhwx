@@ -39,7 +39,7 @@ def index(): #? 奇怪的是, 这里不是dynamic pattern,为什么有name参数
         res_num = len(res_body)
         no_result = res_num == 0
         if not no_result:
-            sort_res = se.sort_query(res_body, query_str, method=method)
+            sort_res,score = se.sort_query(res_body, query_str, method=method)
             if (res_num > 10):
                 sort_res = sort_res[:10]
                 res_num=10
@@ -48,7 +48,7 @@ def index(): #? 奇怪的是, 这里不是dynamic pattern,为什么有name参数
         # print(res_body)
         # for i,j in enumerate(res_body):
         #     print("{} {}".format(i+1,j))
-        return render_template('search.html', res_body=res_body, is_strict=is_strict, query_str=old_query_str, res_num=res_num, is_tf_idf=is_tf_idf,no_result=no_result)
+        return render_template('search.html', res_body=res_body, is_strict=is_strict, query_str=old_query_str, res_num=res_num, is_tf_idf=is_tf_idf,no_result=no_result,score=score)
     return render_template('search.html')
 
 if __name__ == '__main__':

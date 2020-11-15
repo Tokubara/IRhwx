@@ -21,12 +21,9 @@
         </label>
         <br/>
         <div>
-            <label style="margin-right: 30px;">
-
-            </label>
-            <label style="margin-left: 30px;">
+            <label >
                 {% if is_strict %}
-                    <input name='is_strict' type='checkbox' checked>严格模式
+                    <input name='is_strict' type='checkbox' checked/>严格模式
                 {% else %}
                     <input name='is_strict' type='checkbox'>严格模式
                 {% endif %}
@@ -45,23 +42,21 @@
         <tr>
             <th>Rank</th>
             <th>News</th>
-{#            <th>Score</th>#}
-{#            <th>Pos</th>#}
+            <th>Score</th>
         </tr>
         {% for i in range(res_num) %}
-{#        {% set res = res_body[i] %}#}
         <tr>
             <td>{{ i + 1 }}</td>
             <td>{{ res_body[i] }}</td>
-{#            <td>{{ answer.tf }}</td>#}
-{#            <td>{{ answer.pos }}</td>#}
+            <td>{{ score[i] }}</td>
         </tr>
         {% endfor %}
     </table>
     </div>
-        {% else %}
-        <p>没有结果</p>
     {% endif %}
+{% if no_result %}
+    <p>没有搜索到相关结果</p>
+{% endif %}
 
 </body>
 </html>
@@ -84,7 +79,7 @@
         left: 50%;
         top: 20%;
         /* width: 700px; */
-        height: 280px;
+        {#height: 280px;#}
         /* margin-left: -250px;
         margin-top: -30px; */
     }
