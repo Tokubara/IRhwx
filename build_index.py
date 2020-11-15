@@ -197,6 +197,8 @@ class SearchEngine:
 
         for i in range(keywords_num):
             hit_num_corpus = self.keyword_hit_num(keywords[i])
+            if hit_num_corpus==0: # 毫无意义的关键词
+                continue # 由于idf与tf初始化为0, 因此可以直接continue
             idf[i] = np.log(self.docs_num / hit_num_corpus)  # 这里可以优化, 但是向量太短了, 完全没有优化的价值
             for j in range(res_num):
                 hit_num_in_doc = res_body[j]["_source"]["words"].count(keywords[i].rsplit('/')[0])
