@@ -21,7 +21,6 @@ def index():
         old_query_str=query_str
         is_strict = transfer_checkbox(request.form.get('is_strict'))
         is_tf_idf=transfer_checkbox(request.form.get('is_tf_idf'))
-        method="TF-IDF" if is_tf_idf else "BM25"
 
         query_str, within, fixed = get_within_fixed(query_str) # 处理字符串, 得到within, fixed的信息
 
@@ -36,7 +35,7 @@ def index():
         score=None
 
         if not no_result: # 如果有搜索结果, 才需要排序
-            sort_res,score = se.sort_query(res_body, query_str, method=method)
+            sort_res,score = se.sort_query(res_body, query_str, is_tf_idf=is_tf_idf)
             if (res_num > 10):
                 sort_res = sort_res[:10]
                 res_num=10

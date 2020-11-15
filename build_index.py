@@ -186,38 +186,25 @@ class SearchEngine:
             query['query']['bool']['filter'].append({'match': {'words': keyword}})
         return self.es.search(index=self.index_name, body=query)['hits']['total']['value']
 
-    def sort_query(self,res_body,query_str,method="BM25",k=1.2,b=0.2):
+    def sort_query(self,res_body,query_str,is_tf_idf=False,k=1.2,b=0.2):
         '''query_str是用户直接搜索的字符串, 返回是np数组, 是result索引的一个列表, 也返回对应score'''
-        # TODO 如果关键词重复怎么办?
         res_num=len(res_body)
         keywords = query_str.split(' ')
+        # 初始化矩阵
         keywords_num=len(keywords)
-        if method=="TF-IDF":
-            idf = np.zeros(shape=(keywords_num))
-            tf = np.zeros(shape=(keywords_num, res_num))
-            for i in range(keywords_num):
-                hit_num_corpus=self.keyword_hit_num(keywords[i])
-                idf[i] = np.log(self.docs_num / hit_num_corpus) # TODO 这里可以优化, 但是向量太短了, 完全没有优化的价值
-                for j in range(res_num):
-                    hit_num_in_doc=res_body[j]["_source"]["words"].count(keywords[i].rsplit('/')[0]) # bug: res_body[j]["words"]是错的, 应该是res_body[j]["_source"]["words"]
-                    tf[i][j]=hit_num_in_doc/len(res_body[j]["_source"]["words"])
-            tf_idf=tf*idf[:,np.newaxis]
-            res_tf_idf=np.sum(tf_idf,axis=0)
-            sort_res= (-res_tf_idf).argsort()
-            return sort_res
-        elif method=="BM25": # TODO 多数代码相似, 怎么改才能共用
-            idf = np.zeros(shape=(keywords_num))
-            ktf = np.zeros(shape=(keywords_num, res_num)) # 其实就是右边这一项
-            for i in range(keywords_num):
-                hit_num_corpus = self.keyword_hit_num(keywords[i])
-                idf[i] = np.log(self.docs_num / hit_num_corpus)  # TODO 这里可以优化, 但是向量太短了, 完全没有优化的价值
-                for j in range(res_num):
-                    hit_num_in_doc = res_body[j]["_source"]["words"].count(keywords[i].rsplit('/')[0])
-                    ktf[i][j] = hit_num_in_doc / (hit_num_in_doc+ k*( 1-b+b*(len(res_body[j]["_source"]["words"])/self.avgdl)))
-            tf_idf = ktf * idf[:, np.newaxis]
-            res_tf_idf = np.sum(tf_idf, axis=0)
-            sort_res = (-res_tf_idf).argsort()
-            return sort_res, np.sort(res_tf_idf)[::-1]
+        idf = np.zeros(shape=(keywords_num))
+        tf = np.zeros(shape=(keywords_num, res_num)) # 其实就是右边这一项
+
+        for i in range(keywords_num):
+            hit_num_corpus = self.keyword_hit_num(keywords[i])
+            idf[i] = np.log(self.docs_num / hit_num_corpus)  # 这里可以优化, 但是向量太短了, 完全没有优化的价值
+            for j in range(res_num):
+                hit_num_in_doc = res_body[j]["_source"]["words"].count(keywords[i].rsplit('/')[0])
+                tf[i][j] = hit_num_in_doc / (hit_num_in_doc+ k*( 1-b+b*(len(res_body[j]["_source"]["words"])/self.avgdl))) if not is_tf_idf else hit_num_in_doc/len(res_body[j]["_source"]["words"])
+        tf_idf = tf * idf[:, np.newaxis]
+        res_tf_idf = np.sum(tf_idf, axis=0)
+        sort_res = (-res_tf_idf).argsort()
+        return sort_res, np.sort(res_tf_idf)[::-1]
 
     def get_docs_num(self):
         # TODO 每次更新, 需要再次调用这个函数
@@ -268,4 +255,3 @@ if __name__=='__main__':
 
     # sort_res = my_es.sort_query(res_body, query_str,method="TF-IDF")
     # print(sort_res[:10])
-
