@@ -146,21 +146,19 @@ class SearchEngine:
                 else:
                     pos_list.append([i for i,j in enumerate(res["_source"]["words"]) if j == keyword])
             b=[0 for _ in range(n)]
-            ans=[]
-            def dfs(k, b,ans): # 检查位置是否满足约束
+            def dfs(k, b): # 检查位置是否满足约束
                 if (k == n):
-                    if not fix:
-                        b.sort()
+                    _b=b if fix else sorted(b) # 史诗级bug纪念碑
                     for i in range(n - 1):
-                        if not (b[i + 1] - b[i] > 0 and b[i + 1] - b[i] <= (within + 1)):
-                            return
-                    ans.append(b[:])
+                        if not (_b[i + 1] - _b[i] > 0 and _b[i + 1] - _b[i] <= (within + 1)):
+                            return False
+                    return True
                 else:
                     for i in pos_list[k]:
                         b[k] = i
-                        dfs(k + 1,b,ans)
-            dfs(0, b, ans)
-            if(len(ans)>0):
+                        if dfs(k + 1,b):
+                            return True # 为了不再搜索
+            if(dfs(0, b)):
                 filter_res.append(res)
         return filter_res
 
@@ -226,26 +224,13 @@ class SearchEngine:
 
 if __name__=='__main__':
     #%% 构建索引
-    se = SearchEngine(sentence_log='sentence_id', index_name="test-index")
-    se.create_index()
-    for file in files:
-        se.index_file(file)
-    #%% 用于测试搜索结果, 是一个完整的搜索流程, 但有错误, 因此与app.py中的大致相似但不一样
-    # query_str="灰尘 微粒/n 细菌/n within=3"
-    # se = SearchEngine(sentence_log='sentence_id',index_name="full-index")
-    # pos_search=True
-    # query_str, within, fixed = get_within_fixed(query_str)
-    # query_dict = se.get_query_dict(query_str, pos=pos_search)
-    # res_body = se.get_query_res(query_dict)
-    # if pos_search:
-    #     res_body = se.query_pos_filter(res_body, query_str, within=within, fix=fixed)
-    # sort_res = se.sort_query(res_body, query_str)
-    # res_num = len(res_body)
-    # if (res_num > 10):
-    #     sort_res = sort_res[:10]
-    # res_body = [res_body[i] for i in sort_res]
-    # print(len(res_body))
-
+    se = SearchEngine(sentence_log='sentence_id', index_name="full-index")
+    # se.create_index()
+    # for file in files:
+    #     se.index_file(file)
+    query_str="微粒 n n fixed=T"
+    query_str, res_body = se.get_filter_query_res(query_str, True)
+    print(res_body)
     #%% 检测排序结果
     # query_str = "细菌/n 微粒/n 灰尘/n"
     # query_dict = my_es.get_query_dict(query_str,pos=True)
