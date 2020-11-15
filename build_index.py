@@ -2,7 +2,7 @@ from elasticsearch import Elasticsearch
 from elasticsearch import client
 from elasticsearch import helpers
 from datetime import datetime
-from config import maps, files_to_handle, query_template, pose_set
+from config import maps, files, query_template, pose_set
 from sys import getrefcount
 from util import get_within_fixed
 import numpy as np
@@ -11,7 +11,7 @@ import gc
 import re
 
 class SearchEngine:
-    def __init__(self, wrong_log='wrong.log', sentence_log='sentence_id', index_name='test-index'):
+    def __init__(self, index_name, wrong_log='wrong.log', sentence_log='sentence_id'):
         self.es = Elasticsearch()
         self.get_docs_num()
         # self.files = [] # 保存处理过的文件名
@@ -20,20 +20,6 @@ class SearchEngine:
         self.sentence_id = self.read_sentence_id()
         self.maps = maps
         self.index_name = index_name
-        # self.stop_words = self.read_stop_words() #  不需要stopword
-
-    # def read_stop_words(self):
-    #     #     stop_words = set()
-    #     #     try:
-    #     #         with open('stop_words.txt', 'r') as f:
-    #     #             for linenum, line in enumerate(f):
-    #     #                 line = line.strip()
-    #     #                 if line == '':
-    #     #                     continue
-    #     #                 stop_words.add(line)
-    #     #     except FileNotFoundError as e:
-    #     #         print("Can't find stop words dictionary!")
-    #     #     return stop_words
 
     def delete_index(self, index_name):
         self.es.indices.delete(index=index_name, ignore=[400, 404])
@@ -133,36 +119,28 @@ class SearchEngine:
         #     self.read_source(file_name)
         # print("Total sentence number is {}!".format(self.sentence_id))
 
-    def get_query_dict(self, query_str, pos=False):
-        '''query_str是用户直接搜索的字符串, 返回是字典'''
-        # TODO 把者共函数改为私有函数
+    def get_query_body(self, query_str, strict=False):
+        '''query_str是用户直接搜索的字符串, 返回是对es的query body'''
         keywords=set(query_str.split(' '))
         query = json.loads(json.dumps(query_template))
-        # 没有词性约束
-        if not pos:
-            query['query']['bool']['minimum_should_match'] = 1
-            for keyword in keywords:
-                if('/' in keyword):
-                    query['query']['bool']['should'].append({'match': {'words_poses' : keyword}})
+        should_or_must = "must" if strict else "should" # 根据是否是严格模式决定query是must还是should
+        query['query']['bool']['minimum_should_match'] = 0 if strict else 1
+        for keyword in keywords:
+            if keyword not in pose_set: # 只是词性, 比如n是不添加到query中的
+                if '/' in keyword:
+                    where='words_poses'
                 else:
-                    query['query']['bool']['should'].append({'match': {'words': keyword}})
-        else:
-            for keyword in keywords:
-                if ('/' in keyword):
-                    query['query']['bool']['must'].append({'match': {'words_poses': keyword}})
-                else:
-                    query['query']['bool']['must'].append({'match': {'words': keyword}})
+                    where="words"
+                query['query']['bool'][should_or_must].append({'match': {where: keyword}})
         return query
-        #     query['query']['bool']['must'].append({'filter': {'text' : keyword}})
 
-    def get_query_res(self, query_dict, size=50):
-        '''pos表示打开了位置约束, within表示最多可以间隔的, 比如within=0表示必须紧挨着, fix表示顺序必须是关键词出现的顺序'''
-        res = self.es.search(index=self.index_name, body=query_dict, size=size)
-        # assert res['hits']['total']['value']==len(res['hits']['hits']), "长度不相等"
+    def get_query_res(self, query_body, size=50):
+        '''根据query_body获得es的查询结果,size是es返回的最大结果数,默认50'''
+        res = self.es.search(index=self.index_name, body=query_body, size=size)
         return res['hits']['hits']
 
     def query_pos_filter(self, res_body, query_str, within=np.inf, fix=False):
-        '''仅在开启位置过滤时才会调用'''
+        '''仅在开启严格模式时才会调用, 仅返回res_body中符合位置约束的结果'''
         # keywords是已经split过的列表
         keywords = query_str.split(' ')
         n=len(keywords)
@@ -179,10 +157,8 @@ class SearchEngine:
                 else:
                     pos_list.append([i for i,j in enumerate(res["_source"]["words"]) if j == keyword])
             b=[0 for _ in range(n)]
-            # print(pos_list)
             ans=[]
-            def dfs(k, b,ans):
-                # print(pos_list)
+            def dfs(k, b,ans): # 检查位置是否满足约束
                 if (k == n):
                     if not fix:
                         b.sort()
@@ -190,7 +166,6 @@ class SearchEngine:
                         if not (b[i + 1] - b[i] > 0 and b[i + 1] - b[i] <= (within + 1)):
                             return
                     ans.append(b[:])
-                    # return True
                 else:
                     for i in pos_list[k]:
                         b[k] = i
@@ -262,22 +237,29 @@ class SearchEngine:
 
 
 if __name__=='__main__':
-    query_str="灰尘 微粒/n 细菌/n within=3"
-    se = SearchEngine(sentence_log='sentence_id',index_name="full-index")
-    pos_search=True
-    query_str, within, fixed = get_within_fixed(query_str)
-    query_dict = se.get_query_dict(query_str, pos=pos_search)
-    res_body = se.get_query_res(query_dict)
-    if pos_search:
-        res_body = se.query_pos_filter(res_body, query_str, within=within, fix=fixed)
-    sort_res = se.sort_query(res_body, query_str)
-    res_num = len(res_body)
-    if (res_num > 10):
-        sort_res = sort_res[:10]
-    res_body = [res_body[i] for i in sort_res]
-    print(len(res_body))
-    # render_template('search.html', res_body=res_body, pos_search=pos_search)
-    # 检测排序
+    #%% 构建索引
+    se = SearchEngine(sentence_log='sentence_id', index_name="test-index")
+    se.create_index()
+    for file in files:
+        se.index_file(file)
+
+    #%% 用于测试搜索结果, 是一个完整的搜索流程, 但有错误, 因此与app.py中的大致相似但不一样
+    # query_str="灰尘 微粒/n 细菌/n within=3"
+    # se = SearchEngine(sentence_log='sentence_id',index_name="full-index")
+    # pos_search=True
+    # query_str, within, fixed = get_within_fixed(query_str)
+    # query_dict = se.get_query_dict(query_str, pos=pos_search)
+    # res_body = se.get_query_res(query_dict)
+    # if pos_search:
+    #     res_body = se.query_pos_filter(res_body, query_str, within=within, fix=fixed)
+    # sort_res = se.sort_query(res_body, query_str)
+    # res_num = len(res_body)
+    # if (res_num > 10):
+    #     sort_res = sort_res[:10]
+    # res_body = [res_body[i] for i in sort_res]
+    # print(len(res_body))
+
+    #%% 检测排序结果
     # query_str = "细菌/n 微粒/n 灰尘/n"
     # query_dict = my_es.get_query_dict(query_str,pos=True)
     # res_body = my_es.get_query_res(query_dict)
@@ -286,25 +268,4 @@ if __name__=='__main__':
 
     # sort_res = my_es.sort_query(res_body, query_str,method="TF-IDF")
     # print(sort_res[:10])
-
-    # print(my_es.avgdl)
-
-    # indexCreater.create_index()
-    # indexCreater.index_file("tmp_output.txt") # 错误处理
-
-    # import timeit
-    # print(indexCreater.keyword_hit_num())
-    # print(indexCreater.docs_num)
-    # query_str = "意竹/n"
-    # print(json.dumps(query(query_str)))
-    # res = indexCreater.query(query)
-    # print("Got %d Hits:" % requery['query']['bool']['minimum_should_match']=1s['hits']['total']['value'])
-    # cnt = 0
-    # for hit in res['hits']['hits']:
-    #     print(cnt)
-    #     print(hit["_source"])
-    #     cnt += 1
-    # res = es.search(index=index_name, body=query)
-    # print("Got %d Hits:" % res['hits']['total']['value'])
-    # print(res)
 
