@@ -2,12 +2,12 @@ from flask import Flask
 from flask import render_template
 from flask import request
 from build_index import SearchEngine
-from config import files_to_handle
+# from config import files_to_handle
 from util import get_within_fixed
-from word2vec import get_similar_word, load_wordvector
+# from word2vec import get_similar_word, load_wordvector
 # import re
 
-se = SearchEngine(index_name='search-index')
+se = SearchEngine(index_name='full-index')
 app = Flask(__name__)
 # pos2chin, pos2show, pos_list = get_pos_explain()
 # pos2show['w'] = False # w对应的是标点
@@ -24,7 +24,7 @@ def transfer_checkbox(value):
 @app.route('/', methods=['GET', 'POST'])
 @app.route('/search', methods=['GET', 'POST'])
 def index(): #? 奇怪的是, 这里不是dynamic pattern,为什么有name参数, 猜测是多余的
-    pos_search = True # 控制是否控制位置搜索
+    # pos_search = False # 控制是否控制位置搜索
     if request.method =='POST': # 这个函数几乎全部都是这里了, 可见主要是如何处理表单
         query_str = request.form['keyword'] # 第一个输入框, 也就是要查询的
         old_query_str=query_str
@@ -41,8 +41,13 @@ def index(): #? 奇怪的是, 这里不是dynamic pattern,为什么有name参数
         res_num = len(res_body)
         if (res_num > 10):
             sort_res = sort_res[:10]
-        res_body = [res_body[i] for i in sort_res]
-        render_template('search.html', res_body=res_body, pos_search=pos_search,query_str=old_query_str)
+            res_num=10
+        res_body = [res_body[i]["_source"]["origin"] for i in sort_res]
+        print("res_num={}".format(res_num))
+        # print(res_body)
+        for i,j in enumerate(res_body):
+            print("{} {}".format(i+1,j))
+        render_template('search.html', res_body=res_body, pos_search=pos_search,query_str=old_query_str, res_num=res_num)
 
 
         # to_show = count_words(results, keywords_list, windowsize=windowSize, poses_set=set(poses))
@@ -66,5 +71,5 @@ def index(): #? 奇怪的是, 这里不是dynamic pattern,为什么有name参数
     return render_template('search.html')
 
 if __name__ == '__main__':
-    wv = load_wordvector('wordvec')
+    # wv = load_wordvector('wordvec')
     app.run()
