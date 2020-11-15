@@ -22,14 +22,7 @@ def index():
         is_strict = transfer_checkbox(request.form.get('is_strict'))
         is_tf_idf=transfer_checkbox(request.form.get('is_tf_idf'))
 
-        query_str, within, fixed = get_within_fixed(query_str) # 处理字符串, 得到within, fixed的信息
-
-        query_dict = se.get_query_body(query_str, strict=is_strict)
-        res_body = se.get_query_res(query_dict) # 获得查询结果
-        if is_strict: # 如果是严格模式, 还需要过滤
-            if not within:
-                within=np.inf
-            res_body = se.query_pos_filter(res_body, query_str, within=within, fix=fixed)
+        query_str, res_body = se.get_filter_query_res(query_str, is_strict)
         res_num = len(res_body)
         no_result = res_num == 0
         score=None
@@ -42,6 +35,7 @@ def index():
             res_body = [res_body[i]["_source"]["origin"] for i in sort_res] # res_body是显示的字符串列表
         return render_template('search.html', res_body=res_body, is_strict=is_strict, query_str=old_query_str, res_num=res_num, is_tf_idf=is_tf_idf,no_result=no_result,score=score)
     return render_template('search.html')
+
 
 if __name__ == '__main__':
     app.run()

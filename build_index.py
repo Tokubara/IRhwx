@@ -43,16 +43,9 @@ class SearchEngine:
         '''返回词列表, 和词性列表, 词列表为words, 词性列表为pose'''
         wrong_word = open(self.wrong_log, 'a') # 打开wrong.log文件, 准备写入内容
         words = []
-        # poses = []
         for word in word_poses:
             matchObj = re.match(r'(.+)/.+$', word)
-            # try:
-                # if matchObj.group(1) in self.stop_words:
-                #     continue
             words.append(matchObj.group(1))
-                # poses.append(matchObj.group(2))
-            # except:
-            #     wrong_word.write('{}\t{}\n'.format(self.sentence_id, word)) # 会给出是哪一个句子遇到了问题,
         wrong_word.close()
         return words
 
@@ -75,6 +68,7 @@ class SearchEngine:
                 } for row in result)
         helpers.bulk(self.es, action, index=self.index_name, raise_on_error=True)
         self.write_sentence_id()
+        self.get_docs_num()
 
     def index_file(self, file_name):
         '''处理一个文件'''
@@ -83,19 +77,19 @@ class SearchEngine:
             print("Begin read {}".format(file_name))
             result = []
             for linenum, line in enumerate(f):
-                line = line.strip() # 从后面推测来看, line应该长这样"苹果/n 好吃/adj", 而且一个line猜测是对应一条新闻的
+                line = line.strip()
                 if line == '':
                     continue
                 words_poses = line.split(' ')
                 try:
                     words = self.split_word_pos(words_poses) # word:['苹果','好吃'] poses:['n','adj']
-                    result.append([''.join(words), words, words_poses, self.sentence_id]) # 把一条新闻的结果添加进去
+                    result.append([''.join(words), words, words_poses, self.sentence_id])
                     self.sentence_id += 1
                     if self.sentence_id % 200000 == 0: # 每隔200000句清空一下这个变量
                         end_time = datetime.now()
-                        self.store_index(result) # 把这则数据存在es中
-                        del result # 删除一下这个局部变量, 因为它已经存了, 用不到它了
-                        gc.collect() # 但从文章来看, 我总怀疑是多余的, 我怀疑del已经可以了
+                        self.store_index(result) # 存在es中
+                        del result # 防止占用内存过大, 但内存问题似乎还是没有解决
+                        gc.collect()
                         result = []
                         time_diff = end_time - begin_time
                         print("Handle {} sentence! Time Use: {}".format(self.sentence_id, time_diff))
@@ -106,8 +100,6 @@ class SearchEngine:
             gc.collect()
             time_diff = datetime.now() - begin_time
             print("Read {} over! Handle {} sentence! Time Use: {}".format(file_name, self.sentence_id, time_diff))
-            # sel
-
 
     def create_index(self):
         if not self.es.indices.exists(index=self.index_name):
@@ -115,9 +107,6 @@ class SearchEngine:
             print('Create index {}.'.format(self.index_name))
         else:
             print('Find index {}. So don\'t create a new one.'.format(self.index_name))
-        # for file_name in self.files:
-        #     self.read_source(file_name)
-        # print("Total sentence number is {}!".format(self.sentence_id))
 
     def get_query_body(self, query_str, strict=False):
         '''query_str是用户直接搜索的字符串, 返回是对es的query body'''
@@ -209,7 +198,7 @@ class SearchEngine:
         return sort_res, np.sort(res_tf_idf)[::-1]
 
     def get_docs_num(self):
-        # TODO 每次更新, 需要再次调用这个函数
+        '''更新docs_num和avgdl两个属性'''
         self.docs_num=self.es.count()["count"]
         query={
             "aggs": {
@@ -224,6 +213,16 @@ class SearchEngine:
         }
         self.avgdl=self.es.search(body=query,size=0)["aggregations"]["avg_size"]["value"]
 
+    def get_filter_query_res(self, query_str, is_strict):
+        query_str, within, fixed = get_within_fixed(query_str)  # 处理字符串, 得到within, fixed的信息
+        query_dict = self.get_query_body(query_str, strict=is_strict)
+        res_body = self.get_query_res(query_dict)  # 获得查询结果
+        if is_strict:  # 如果是严格模式, 还需要过滤
+            if not within:
+                within = np.inf
+            res_body = self.query_pos_filter(res_body, query_str, within=within, fix=fixed)
+        return query_str, res_body
+
 
 if __name__=='__main__':
     #%% 构建索引
@@ -231,7 +230,6 @@ if __name__=='__main__':
     se.create_index()
     for file in files:
         se.index_file(file)
-
     #%% 用于测试搜索结果, 是一个完整的搜索流程, 但有错误, 因此与app.py中的大致相似但不一样
     # query_str="灰尘 微粒/n 细菌/n within=3"
     # se = SearchEngine(sentence_log='sentence_id',index_name="full-index")
