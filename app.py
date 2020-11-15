@@ -4,6 +4,7 @@ from flask import request
 from build_index import SearchEngine
 # from config import files_to_handle
 from util import get_within_fixed
+import numpy as np
 # from word2vec import get_similar_word, load_wordvector
 # import re
 
@@ -36,6 +37,8 @@ def index(): #? 奇怪的是, 这里不是dynamic pattern,为什么有name参数
         query_dict = se.get_query_dict(query_str, pos=pos_search)
         res_body = se.get_query_res(query_dict)
         if pos_search:
+            if not within:
+                within=np.inf
             res_body = se.query_pos_filter(res_body, query_str, within=within, fix=fixed)
         sort_res = se.sort_query(res_body, query_str)
         res_num = len(res_body)
@@ -47,27 +50,7 @@ def index(): #? 奇怪的是, 这里不是dynamic pattern,为什么有name参数
         # print(res_body)
         for i,j in enumerate(res_body):
             print("{} {}".format(i+1,j))
-        render_template('search.html', res_body=res_body, pos_search=pos_search,query_str=old_query_str, res_num=res_num)
-
-
-        # to_show = count_words(results, keywords_list, windowsize=windowSize, poses_set=set(poses))
-        # for item in to_show:
-        #     try:
-        #         item['pos'] = pos2chin[item['pos']] # 本来to_show中也有pos属性, 但是是n,x这样, 这个循环的目的是把它转换为'名词'之类的
-        #     except KeyError as e:
-        #         item['pos'] = item['pos']
-        # initial_info = {'query': query_str, 'window': request.form['window'], 'poses': poses} # poses也就是, 用户勾选的那些词性
-        # if pos_search:
-        #     if len(words) == 0:
-        #         sim_words = "没有找到意思相近的词语"
-        #     else:
-        #         sim_words = '关联的词语：{}'.format(' '.join(words))
-        #     return render_template('search.html', info=initial_info, ans=to_show, pos_info=pos_info, \
-        #                             pos_search=pos_search, sim_words=sim_words)
-        # else:
-        #     return render_template('search.html', info=initial_info, ans=to_show, pos_info=pos_info, \
-        #                             pos_search=pos_search)
-
+        return render_template('search.html', res_body=res_body, pos_search=pos_search,query_str=old_query_str, res_num=res_num)
     return render_template('search.html')
 
 if __name__ == '__main__':
