@@ -1,6 +1,8 @@
-.vscode/
-__pycache__/
+.vscode
+__pycache__
 *.log
+*test*
+*copy*
 **/*.pdf
 wordvec/
 .idea

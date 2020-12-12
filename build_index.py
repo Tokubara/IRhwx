@@ -12,13 +12,13 @@ import re
 class SearchEngine:
     def __init__(self, index_name, wrong_log='wrong.log', sentence_log='sentence_id'):
         self.es = Elasticsearch()
+        self.index_name = index_name
         self.get_docs_num()
         # self.files = [] # 保存处理过的文件名
         self.wrong_log = wrong_log
         self.sentence_log = sentence_log
         self.sentence_id = self.read_sentence_id()
         self.maps = maps
-        self.index_name = index_name
 
     def delete_index(self, index_name):
         self.es.indices.delete(index=index_name, ignore=[400, 404])
@@ -108,7 +108,7 @@ class SearchEngine:
             print('Find index {}. So don\'t create a new one.'.format(self.index_name))
 
     def get_query_body(self, query_str, strict=False):
-        '''query_str是用户直接搜索的字符串, 返回是对es的query body'''
+        '''query_str是用户直接搜索的字符串(已去除strict和fixed), 返回是对es的query body'''
         keywords=set(query_str.split(' '))
         query = json.loads(json.dumps(query_template))
         should_or_must = "must" if strict else "should" # 根据是否是严格模式决定query是must还是should
@@ -123,19 +123,24 @@ class SearchEngine:
         return query
 
     def get_query_res(self, query_body, size=50):
-        '''根据query_body获得es的查询结果,size是es返回的最大结果数,默认50'''
+        '''
+        参数: query_body是es的_search的body, size是es返回的最大结果数,默认50
+        返回: 根据query_body获得es的查询结果, res['hits']['hits'], 是列表
+        '''
         res = self.es.search(index=self.index_name, body=query_body, size=size)
         return res['hits']['hits']
 
     def query_pos_filter(self, res_body, query_str, within=np.inf, fix=False):
-        '''仅在开启严格模式时才会调用, 仅返回res_body中符合位置约束的结果'''
+        '''
+        仅在开启严格模式时才会调用, 仅返回res_body中符合位置约束的结果, 还是列表, 满足位置约束的列表
+        '''
         # keywords是已经split过的列表
         keywords = query_str.split(' ')
         n=len(keywords)
         # 先得到可能的结果列表
         filter_res=[]
         for res in res_body:
-            pos_list = []
+            pos_list = [] # 这是个列表, 其元素也是列表, 对应的是query_str第一个分词在这个res中的位置索引列表, 比如, '锅炉', 如果'锅炉'词列表中出现了多次, 那么就返回这些索引, 由于res都是严格匹配的, 不应该出现为空的情况
             res_poses=[word_pose.split('/')[1] for word_pose in res["_source"]["words_poses"]]
             for keyword in keywords: # 找出满足约束的位置
                 if keyword in pose_set:
@@ -162,10 +167,10 @@ class SearchEngine:
         return filter_res
 
     def keyword_hit_num(self,keyword):
-        '''返回一个词在index中总共出现的次数,既支持含有pose的, 又支持不含有pose的'''
+        '''返回index中出现了keyword的文档的个数,既支持含有pose的, 又支持不含有pose的, 也就是说, '锅炉'可以, '锅炉/n'也可以 '''
         # bug:本来"minimum_should_match": 1, 在should为空的情况下, 是一个也不会返回的
         query = json.loads(json.dumps(query_template))
-        query["size"] = 0
+        query["size"] = 0 # 因为只需要个数
         if '/' in keyword:
             query['query']['bool']['filter'].append({'match': {'words_poses': keyword}})
         else:
@@ -173,7 +178,9 @@ class SearchEngine:
         return self.es.search(index=self.index_name, body=query)['hits']['total']['value']
 
     def sort_query(self,res_body,query_str,is_tf_idf=False,k=1.2,b=0.2):
-        '''query_str是用户直接搜索的字符串, 返回是np数组, 是result索引的一个列表, 也返回对应score'''
+        '''
+        query_str是用户直接搜索的字符串, 返回是np数组, 是result索引的一个列表, 也返回对应的score
+        '''
         res_num=len(res_body)
         keywords = query_str.split(' ')
         # 初始化矩阵
@@ -196,7 +203,7 @@ class SearchEngine:
 
     def get_docs_num(self):
         '''更新docs_num和avgdl两个属性'''
-        self.docs_num=self.es.count()["count"]
+        self.docs_num=self.es.count(index=self.index_name)["count"]
         query={
             "aggs": {
                 "avg_size": {
@@ -211,6 +218,10 @@ class SearchEngine:
         self.avgdl=self.es.search(body=query,size=0)["aggregations"]["avg_size"]["value"]
 
     def get_filter_query_res(self, query_str, is_strict):
+        '''
+        根据原始的query_str(就是用户在输入框输入的, 包含关键词, 和within等), 返回满足的结果, 未排序, 返回
+        返回:query_str(字符串, 不是列表, 去除了within和fixed), res_body
+        '''
         query_str, within, fixed = get_within_fixed(query_str)  # 处理字符串, 得到within, fixed的信息
         query_dict = self.get_query_body(query_str, strict=is_strict)
         res_body = self.get_query_res(query_dict)  # 获得查询结果

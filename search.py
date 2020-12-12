@@ -1,20 +1,21 @@
 n=3
-a=[[1,3,7],[3,8],[6,12]]
+a=[[1,2],[3,4],[5,6]]
 within=2
 b=[0,0,0] # 临时的结果
 ans=[]
 
-def dfs(k,a,b,n,ans,within):
-    # global a,within,n,b,ans
+def dfs(k,within,n,b,ans):
+    global a
     if(k==n):
-        for i in range(n-1):
-            if not (b[i+1]-b[i]>0 and b[i+1]-b[i]<=(within+1)):
-                return
-        ans.append(b[:])
+        print(b)
+        if not (b[0]%2==0 and b[1]%2==1 and b[2]%2==0):
+            return False
+        return True
     else:
         for i in a[k]:
             b[k]=i
-            dfs(k+1,a,b,n,ans,within)
+            if(dfs(k+1,within,n,b,ans)):
+                return True
 
-dfs(0,a,b,n,ans,within)
-print(ans)
+dfs(0,within,n,b,ans)
+# print(ans)
