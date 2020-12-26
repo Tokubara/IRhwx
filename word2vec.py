@@ -10,15 +10,19 @@ import os
 
 MAX_DOUBLE = 1e10
 
-def str2bool(v):
-    if v.lower() in ('yes', 'true', 't', 'y', '1'):
-        return True
-    elif v.lower() in ('no', 'false', 'f', 'n', '0'):
-        return False
-    else:
-        raise argparse.ArgumentTypeError('Unsupported value encountered.')
+# def str2bool(v):
+#     if v.lower() in ('yes', 'true', 't', 'y', '1'):
+#         return True
+#     elif v.lower() in ('no', 'false', 'f', 'n', '0'):
+#         return False
+#     else:
+#         raise argparse.ArgumentTypeError('Unsupported value encountered.')
 
 def intOrNone(v):
+    '''
+    为了配合init_parser中的--max_doc, v是命令行输入, 待解析的内容
+    :param v:
+    '''
     try:
         return int(v)
     except ValueError as e:
@@ -28,11 +32,15 @@ def intOrNone(v):
             raise argparse.ArgumentTypeError('Unsupported value encountered.')
 
 def init_parser():
+    '''
+    似乎是解析命令行的工具
+    :return:
+    '''
     parser = argparse.ArgumentParser()
-    parser.add_argument('--max_doc', type=intOrNone, default=None, 
+    parser.add_argument('--max_doc', type=intOrNone, default=None,
                         help='Max number of document.')
     parser.add_argument('--mode', type=str, default='train',
-                        help='The mode to instrcut code running. Must be count/train/test')
+                        help='The mode to instruct code running. Must be count/train/test')
     parser.add_argument('--model', type=str, default='wordvec',
                         help='A trained word vector model path.')
     parser.add_argument('--iter', type=int, default=50,
@@ -44,16 +52,25 @@ def init_parser():
     return parser
 
 def get_words(txt):
+    '''
+    :param txt: 长这样, "苹果/n"
+    :return: 得到苹果
+    '''
     matchObj = re.match(r'(.+)/(.+)$', txt)
     return matchObj.group(1)
 
 class MyCorpus(object):
     def __init__(self, input_file_names, doc_print, max_doc=None):
+        '''
+        :param input_file_names: 列表, 处理文件名
+        :param doc_print: 每处理多少个, 输出一次
+        :param max_doc:
+        '''
         self.input_file_names = input_file_names
         self.doc_print = doc_print
         self.max_doc = max_doc
 
-    
+
     def __iter__(self):
         """Returns a list of a list of words. Each sublist is a sentence."""
         sentence_words = []
@@ -68,11 +85,11 @@ class MyCorpus(object):
                     continue
                 doc_num += 1
                 # sent_words = filter(lambda w: w.split('/')[-1] != 'w', line.split())
-                sent_words = line.split()
-                sent_words = map(get_words, sent_words)
+                sent_words = line.split() # 得到了所有类似 今天/n 明天/n 的列表
+                sent_words = map(get_words, sent_words) # map就是一一调用的函数, 相当于apply, 去掉了词性属性, 只有词了
                 words = []
                 for word in sent_words:
-                    words.append(word)
+                    words.append(word) # 这不就是拷贝么?
                 if doc_num % self.doc_print == 0:
                     print('{}\tRead doc number is {}'.format(str(datetime.now()), doc_num))
                 yield words
@@ -151,6 +168,11 @@ def test(model):
     print(wv.most_similar('牛市'))
 
 def load_wordvector(model):
+    '''
+    载入./model/word2vec.txt文件
+    :param model: model是字符串, 是路径
+    :return:
+    '''
     model_path = os.path.join(model, 'word2vec.txt')
     wv = KeyedVectors.load_word2vec_format(model_path, binary=False)
     print("Load Word vector from {}.".format(model_path))
@@ -166,7 +188,7 @@ def get_similar_word(word, wv):
 
 if __name__=='__main__':
     parser = init_parser()
-    args = parser.parse_args()
+    args = parser.parse_args() # argparse.Namespace(doc_print=2000)
     wv = None
     if args.mode == 'train':
         wv = train(files_to_handle, args.model, args.iter, args.doc_print, args.workers, args.min_cnt, args.step_store, args.max_doc)

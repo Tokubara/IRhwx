@@ -91,4 +91,4 @@ def index(name=None): #? 奇怪的是, 这里不是dynamic pattern,为什么有n
 
 if __name__ == '__main__':
     wv = load_wordvector('wordvec')
-    app.run()
+    # app.run()
