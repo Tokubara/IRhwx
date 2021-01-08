@@ -8,7 +8,8 @@ from bert_serving.client import BertClient
 import numpy as np
 import json
 import gc
-import pickle as pkl
+import dill
+# import pickle as pkl
 import re
 import os
 import re
@@ -45,7 +46,7 @@ class SearchEngine:
         '''
         try:
             with open(self.sentence_log_path, 'rb') as f:
-                self.sentence_log = pkl.load(f)
+                self.sentence_log = dill.load(f)
         except:
             # 不需要创建, 如果需要写, 自然会写
             self.sentence_log = defaultdict(lambda:0)
@@ -55,7 +56,7 @@ class SearchEngine:
         state:写文件
         '''
         with open(self.sentence_log_path, 'wb') as f:
-            pkl.dump(self.sentence_log,f)
+            dill.dump(self.sentence_log,f)
     @staticmethod
     def split_word_pos(word_poses):
         '''返回词列表, 比如['明天/n','你好/v']->['明天','你好']'''
@@ -70,16 +71,17 @@ class SearchEngine:
         state:存入到es中(self.index_name),写sentence_log文件,更新docs_num和avgdl两个属性
         call:被index_file调用
         '''
+        embedding = self.bc.encode([SearchEngine.chinese_pattern.sub('',row[0]) for row in result])
         action = ({
                     "_source": {
                         # 'text': row[0], 'poses': row[1]
                         'origin': row[0],
                         'words': row[1],
                         'words_poses': row[2],
-                        "embedding": self.bc.encode(SearchEngine.chinese_pattern.sub('',row[0]))
+                        "embedding": vec
                     },
                     "_id": row[3]
-                } for row in result)
+                } for row,vec in zip(result,embedding))
         helpers.bulk(self.es, action, index=self.index_name, raise_on_error=True)
         self.write_sentence_log()
         self.get_docs_num()
@@ -255,10 +257,9 @@ class SearchEngine:
             res_body = self.query_pos_filter(res_body, query_str, within=within, fix=fixed)
         return query_str, res_body
 
-
 if __name__=='__main__':
     #%% 构建索引
     se = SearchEngine(index_name='embedding-index-0')
-    for file in files:
-        se.index_file(file,max_line=100000)
-    import pdb;pdb.set_trace()
+    # for file in files:
+    #     se.index_file(file,max_line=1000,batch_num=1000)
+    # pdb.set_trace()
