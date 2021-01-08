@@ -1,4 +1,4 @@
-maps={
+mappings={
   "mappings": {
     "properties": {
       "origin": {
@@ -9,6 +9,10 @@ maps={
       },
       "words_poses": {
         "type": "keyword"
+      },
+      "embedding":{
+        "type": "dense_vector",
+        "dims": 768
       }
     }
   }

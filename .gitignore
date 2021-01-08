@@ -13,3 +13,5 @@ Sogou0012
 report
 learn-word2vec
 learn-python
+.ipynb_checkpoints
+*.ipynb

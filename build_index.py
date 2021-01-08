@@ -1,46 +1,61 @@
 from elasticsearch import Elasticsearch
 from elasticsearch import client
 from elasticsearch import helpers
-from datetime import datetime
-from config import maps, files, query_template, pose_set, index_name
+import time
+from config import mappings, files, query_template, pose_set, index_name
 from util import get_within_fixed
+from bert_serving.client import BertClient
 import numpy as np
 import json
 import gc
+import pickle as pkl
+import re
+import os
 import re
 
 class SearchEngine:
+    chinese_pattern=re.compile(r"[^\u4e00-\u9fa5]+")
     def __init__(self, index_name):
         '''
         argv:("test-index"),es的索引名
-        change state:存入索引名,初始化sentence_id,更新docs_num和avgdl两个属性
+        change state:存入索引名,初始化sentence_log,更新docs_num和avgdl两个属性
         '''
-        self.es = Elasticsearch()
-        self.index_name = index_name
-        self.get_docs_num() # TODO: 这里不好, 需要判断是否已经存在
-        # self.files = [] # 保存处理过的文件名
         self.wrong_log = 'wrong.log'
-        self.sentence_log = 'sentence_id'
-        self.sentence_id = self.read_sentence_id()
-        self.maps = maps # TODO: 这里也不好, mapping是创建时的属性
+        self.sentence_log_path = 'sentence_log'
+        self.read_sentence_log()
+
+        self.bc = BertClient()
+        self.es = Elasticsearch()
+
+        self.index_name = index_name
+        self.mappings = mappings
+        if not self.es.indices.exists(index=self.index_name):
+            self.es.indices.create(index=self.index_name, ignore=[400, 404], body = self.mappings)
+        else:
+            self.get_docs_num()
+        
 
     # def delete_index(self, index_name):
     #     self.es.indices.delete(index=index_name, ignore=[400, 404])
     #     print('Delete index {} succesful!'.format(index_name))
 
-    def read_sentence_id(self):
-        '''从self.sentence_log读取一个数并返回,如果self.sentence_log文件不存在,返回0'''
+    def read_sentence_log(self):
+        '''
+        state:加载self.sentence_log对应的pickle 字典, 如果不存在则啥也不做
+        '''
         try:
-            with open(self.sentence_log, 'r') as f:
-                return int(f.readline().strip())
-        except FileNotFoundError:
+            with open(self.sentence_log_path, 'rb') as f:
+                self.sentence_log = pkl.load(f)
+        except:
             # 不需要创建, 如果需要写, 自然会写
-            return 0
+            pass
 
-    def write_sentence_id(self):
-        # 写sentence_id文件
-        with open(self.sentence_log, 'w') as f:
-            f.write('{}'.format(self.sentence_id))
+    def write_sentence_log(self):
+        '''
+        state:写文件
+        '''
+        with open(self.sentence_log_path, 'wb') as f:
+            pkl.dump(self.sentence_log,f)
     @staticmethod
     def split_word_pos(self, word_poses):
         '''返回词列表, 比如['明天/n','你好/v']->['明天','你好']'''
@@ -52,7 +67,7 @@ class SearchEngine:
         "0秒","之内","就","再次","燃烧","起来","了","。"
         "0秒/t","之内/f","就/d","再次/d","燃烧/v","起来/v","了/u","。/w"
         id, id没什么用
-        state:存入到es中(self.index_name),写sentence_id文件,更新docs_num和avgdl两个属性
+        state:存入到es中(self.index_name),写sentence_log文件,更新docs_num和avgdl两个属性
         call:被index_file调用
         '''
         action = ({
@@ -60,59 +75,49 @@ class SearchEngine:
                         # 'text': row[0], 'poses': row[1]
                         'origin': row[0],
                         'words': row[1],
-                        'words_poses': row[2]
+                        'words_poses': row[2],
+                        "embedding": self.bc.encode(SearchEngine.chinese_pattern.sub('',row[0]))
                     },
                     "_id": row[3]
                 } for row in result)
         helpers.bulk(self.es, action, index=self.index_name, raise_on_error=True)
-        self.write_sentence_id()
+        self.write_sentence_log()
         self.get_docs_num()
 
-    def index_file(self, file_name):
+    def index_file(self, file_name, start_line_number=1):
         '''
         处理一个新闻文件,
         argv:文件路径
-        state:改es,sentence_id
+        state:改es,sentence_log
         imple:文本处理+store_index
         '''
-        begin_time = datetime.now()
+        begin_time = time.time()
+        file_base_name=os.path.basename(file_name)
         with open(file_name) as f:
             print("Begin read {}".format(file_name))
             result = []
-            for linenum, line in enumerate(f):
+            for linenum, line in enumerate(f,start_line_number):
                 line = line.strip()
                 if line == '':
                     continue
                 words_poses = line.split(' ')
                 try:
                     words = self.split_word_pos(words_poses) # word:['苹果','好吃'] poses:['n','adj']
-                    result.append([''.join(words), words, words_poses, self.sentence_id])
-                    self.sentence_id += 1
-                    if self.sentence_id % 200000 == 0: # 每隔200000句清空一下这个变量
-                        end_time = datetime.now()
+                    result.append([''.join(words), words, words_poses, linenum])
+                    if linenum % 200000 == 0: # 每隔200000句清空一下这个变量
+                        end_time = time.time()
                         self.store_index(result) # 存在es中
-                        del result # 防止占用内存过大, 但内存问题似乎还是没有解决
-                        gc.collect()
+                        self.sentence_log[file_base_name]=linenum
                         result = []
                         time_diff = end_time - begin_time
-                        print("Handle {} sentence! Time Use: {}".format(self.sentence_id, time_diff))
+                        print("Handle {} sentence! Time Use: {}".format(linenum, time_diff))
                 except:
                     continue
             self.store_index(result) # 处理剩余的结果
-            del result
-            gc.collect()
-            time_diff = datetime.now() - begin_time
-            print("Read {} over! Handle {} sentence! Time Use: {}".format(file_name, self.sentence_id, time_diff))
+            self.sentence_log[file_base_name]=linenum
+            time_diff = time.time() - begin_time
+            print("Read {} over! Handle {} sentence! Time Use: {}".format(file_name, linenum, time_diff))
 
-    def create_index(self):
-        '''
-        state:根据self.index_name创建es index
-        '''
-        if not self.es.indices.exists(index=self.index_name):
-            self.es.indices.create(index=self.index_name, ignore=[400, 404], body = self.maps)
-            print('Create index {}.'.format(self.index_name))
-        else:
-            print('Find index {}. So don\'t create a new one.'.format(self.index_name))
     @staticmethod
     def get_query_body(query_str, strict=False):
         '''
