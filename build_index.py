@@ -1,5 +1,4 @@
 from elasticsearch import Elasticsearch
-from elasticsearch import client
 from elasticsearch import helpers
 import time
 from config import mappings, files, query_template, pose_set, index_name
@@ -58,7 +57,7 @@ class SearchEngine:
         with open(self.sentence_log_path, 'wb') as f:
             pkl.dump(self.sentence_log,f)
     @staticmethod
-    def split_word_pos(self, word_poses):
+    def split_word_pos(word_poses):
         '''返回词列表, 比如['明天/n','你好/v']->['明天','你好']'''
         return [word.split('/')[0] for word in word_poses]
 
@@ -85,7 +84,7 @@ class SearchEngine:
         self.write_sentence_log()
         self.get_docs_num()
 
-    def index_file(self, file_name):
+    def index_file(self, file_name, max_line=1200000, batch_num=100000):
         '''
         处理一个新闻文件,
         argv:文件路径
@@ -103,18 +102,20 @@ class SearchEngine:
                 if line == '':
                     continue
                 words_poses = line.split(' ')
-                try:
-                    words = self.split_word_pos(words_poses) # word:['苹果','好吃'] poses:['n','adj']
-                    result.append([''.join(words), words, words_poses, linenum])
-                    if linenum % 200000 == 0: # 每隔200000句清空一下这个变量
-                        end_time = time.time()
-                        self.store_index(result) # 存在es中
-                        self.sentence_log[file_base_name]=linenum
-                        result = []
-                        time_diff = end_time - begin_time
-                        print("Handle {} sentence! Time Use: {}".format(linenum, time_diff))
-                except:
-                    continue
+                # try:
+                words = self.split_word_pos(words_poses) # word:['苹果','好吃'] poses:['n','adj']
+                result.append([''.join(words), words, words_poses, linenum])
+                if linenum % batch_num == 0: # 每隔200000句清空一下这个变量
+                    end_time = time.time()
+                    self.store_index(result) # 存在es中
+                    self.sentence_log[file_base_name]=linenum
+                    result = []
+                    time_diff = end_time - begin_time
+                    print("Handle {} sentence! Time Use: {}".format(linenum, time_diff))
+                    if linenum>=max_line:
+                        break
+                # except:
+                #     continue
             self.store_index(result) # 处理剩余的结果
             self.sentence_log[file_base_name]=linenum
             time_diff = time.time() - begin_time
@@ -257,7 +258,7 @@ class SearchEngine:
 
 if __name__=='__main__':
     #%% 构建索引
-    se = SearchEngine(index_name=index_name)
-    se.create_index()
+    se = SearchEngine(index_name='embedding-index-0')
     for file in files:
-        se.index_file(file)
+        se.index_file(file,max_line=100000)
+    import pdb;pdb.set_trace()
