@@ -3,8 +3,6 @@ from flask import render_template
 from flask import request
 from build_index import SearchEngine
 from config import app_index_name
-from util import get_within_fixed
-import numpy as np
 
 se = SearchEngine(index_name=app_index_name)
 app = Flask(__name__)

@@ -10,26 +10,30 @@ import gc
 import re
 
 class SearchEngine:
-    def __init__(self, index_name, wrong_log='wrong.log', sentence_log='sentence_id'):
+    def __init__(self, index_name):
+        '''
+        argv:("test-index"),es的索引名
+        change state:存入索引名,初始化sentence_id,更新docs_num和avgdl两个属性
+        '''
         self.es = Elasticsearch()
         self.index_name = index_name
-        self.get_docs_num()
+        self.get_docs_num() # TODO: 这里不好, 需要判断是否已经存在
         # self.files = [] # 保存处理过的文件名
-        self.wrong_log = wrong_log
-        self.sentence_log = sentence_log
+        self.wrong_log = 'wrong.log'
+        self.sentence_log = 'sentence_id'
         self.sentence_id = self.read_sentence_id()
-        self.maps = maps
+        self.maps = maps # TODO: 这里也不好, mapping是创建时的属性
 
-    def delete_index(self, index_name):
-        self.es.indices.delete(index=index_name, ignore=[400, 404])
-        print('Delete index {} succesful!'.format(index_name))
+    # def delete_index(self, index_name):
+    #     self.es.indices.delete(index=index_name, ignore=[400, 404])
+    #     print('Delete index {} succesful!'.format(index_name))
 
     def read_sentence_id(self):
-        '''用于初始化sentence_id这个变量,其实就是读取文件中的一个数'''
+        '''从self.sentence_log读取一个数并返回,如果self.sentence_log文件不存在,返回0'''
         try:
             with open(self.sentence_log, 'r') as f:
                 return int(f.readline().strip())
-        except FileNotFoundError as e:
+        except FileNotFoundError:
             # 不需要创建, 如果需要写, 自然会写
             return 0
 
@@ -37,16 +41,10 @@ class SearchEngine:
         # 写sentence_id文件
         with open(self.sentence_log, 'w') as f:
             f.write('{}'.format(self.sentence_id))
-
+    @staticmethod
     def split_word_pos(self, word_poses):
-        '''返回词列表, 和词性列表, 词列表为words, 词性列表为pose'''
-        wrong_word = open(self.wrong_log, 'a') # 打开wrong.log文件, 准备写入内容
-        words = []
-        for word in word_poses:
-            matchObj = re.match(r'(.+)/.+$', word)
-            words.append(matchObj.group(1))
-        wrong_word.close()
-        return words
+        '''返回词列表, 比如['明天/n','你好/v']->['明天','你好']'''
+        return [word.split('/')[0] for word in word_poses]
 
     def store_index(self, result):
         '''其中result是一个列表, 每一个成员是一个列表, 包括了
@@ -54,9 +52,10 @@ class SearchEngine:
         "0秒","之内","就","再次","燃烧","起来","了","。"
         "0秒/t","之内/f","就/d","再次/d","燃烧/v","起来/v","了/u","。/w"
         id, id没什么用
+        state:存入到es中(self.index_name),写sentence_id文件,更新docs_num和avgdl两个属性
+        call:被index_file调用
         '''
         action = ({
-                    # "_index": self.index_name,
                     "_source": {
                         # 'text': row[0], 'poses': row[1]
                         'origin': row[0],
@@ -70,7 +69,12 @@ class SearchEngine:
         self.get_docs_num()
 
     def index_file(self, file_name):
-        '''处理一个文件'''
+        '''
+        处理一个新闻文件,
+        argv:文件路径
+        state:改es,sentence_id
+        imple:文本处理+store_index
+        '''
         begin_time = datetime.now()
         with open(file_name) as f:
             print("Begin read {}".format(file_name))
@@ -101,14 +105,20 @@ class SearchEngine:
             print("Read {} over! Handle {} sentence! Time Use: {}".format(file_name, self.sentence_id, time_diff))
 
     def create_index(self):
+        '''
+        state:根据self.index_name创建es index
+        '''
         if not self.es.indices.exists(index=self.index_name):
             self.es.indices.create(index=self.index_name, ignore=[400, 404], body = self.maps)
             print('Create index {}.'.format(self.index_name))
         else:
             print('Find index {}. So don\'t create a new one.'.format(self.index_name))
-
-    def get_query_body(self, query_str, strict=False):
-        '''query_str是用户直接搜索的字符串(已去除strict和fixed), 返回是对es的query body'''
+    @staticmethod
+    def get_query_body(query_str, strict=False):
+        '''
+        query_str是用户直接搜索的字符串(已去除strict和fixed), strict(=False)严格模式
+        返回是es的query body, 用于es.search
+        '''
         keywords=set(query_str.split(' '))
         query = json.loads(json.dumps(query_template))
         should_or_must = "must" if strict else "should" # 根据是否是严格模式决定query是must还是should
@@ -124,15 +134,17 @@ class SearchEngine:
 
     def get_query_res(self, query_body, size=50):
         '''
-        参数: query_body是es的_search的body, size是es返回的最大结果数,默认50
+        参数: query_body是es的_search的body(通过get_query_body获取), size是es返回的最大结果数,默认50
         返回: 根据query_body获得es的查询结果, res['hits']['hits'], 是列表
         '''
         res = self.es.search(index=self.index_name, body=query_body, size=size)
         return res['hits']['hits']
-
-    def query_pos_filter(self, res_body, query_str, within=np.inf, fix=False):
+    @staticmethod
+    def query_pos_filter(res_body, query_str, within=np.inf, fix=False):
         '''
-        仅在开启严格模式时才会调用, 仅返回res_body中符合位置约束的结果, 还是列表, 满足位置约束的列表
+        仅在开启严格模式时才会调用
+        within是位置约束(within=5, 表示前一个词与后一个词之间的词数不能超过 5),fix为是否按严格的先后顺序
+        返回res_body(es返回的搜索结果)中符合位置约束的过滤结果
         '''
         # keywords是已经split过的列表
         keywords = query_str.split(' ')
@@ -167,7 +179,10 @@ class SearchEngine:
         return filter_res
 
     def keyword_hit_num(self,keyword):
-        '''返回index中出现了keyword的文档的个数,既支持含有pose的, 又支持不含有pose的, 也就是说, '锅炉'可以, '锅炉/n'也可以 '''
+        '''
+        既支持含有pose的, 又支持不含有pose的, 也就是说, '锅炉'可以, '锅炉/n'也可以
+        返回index中出现了keyword的文档的个数
+        '''
         # bug:本来"minimum_should_match": 1, 在should为空的情况下, 是一个也不会返回的
         query = json.loads(json.dumps(query_template))
         query["size"] = 0 # 因为只需要个数
@@ -179,7 +194,8 @@ class SearchEngine:
 
     def sort_query(self,res_body,query_str,is_tf_idf=False,k=1.2,b=0.2):
         '''
-        query_str是用户直接搜索的字符串, 返回是np数组, 是result索引的一个列表, 也返回对应的score
+        query_str是用户直接搜索的字符串(不包括fixed等),is_tf_idf=False表示用BM25方法,k与b是PM2.5的参数
+        返回是np数组, 是result索引的一个列表以及对应的score
         '''
         res_num=len(res_body)
         keywords = query_str.split(' ')
@@ -202,7 +218,7 @@ class SearchEngine:
         return sort_res, np.sort(res_tf_idf)[::-1]
 
     def get_docs_num(self):
-        '''更新docs_num和avgdl两个属性'''
+        '''state:更新docs_num和avgdl两个属性'''
         self.docs_num=self.es.count(index=self.index_name)["count"]
         query={
             "aggs": {
@@ -219,8 +235,8 @@ class SearchEngine:
 
     def get_filter_query_res(self, query_str, is_strict):
         '''
-        根据原始的query_str(就是用户在输入框输入的, 包含关键词, 和within等), 返回满足的结果, 未排序, 返回
-        返回:query_str(字符串, 不是列表, 去除了within和fixed), res_body
+        根据原始的query_str(就是用户在输入框输入的, 包含关键词, 和within等), 返回满足的结果, 未排序
+        返回:query_str(字符串, 不是列表, 去除了within和fixed), 过滤后res_body,未排序,相当于pipeline
         '''
         query_str, within, fixed = get_within_fixed(query_str)  # 处理字符串, 得到within, fixed的信息
         query_dict = self.get_query_body(query_str, strict=is_strict)
