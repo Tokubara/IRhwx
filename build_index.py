@@ -257,8 +257,9 @@ class SearchEngine:
             res_body = self.query_pos_filter(res_body, query_str, within=within, fix=fixed)
         return query_str, res_body
     def get_embedding_query_res(self, query_str, max_num=10):
+        # import pdb;pdb.set_trace()
         query_str, _, _ = get_within_fixed(query_str)
-        query_vector=self.bc.encode([SearchEngine.chinese_pattern.sub('',query_str)])
+        query_vector=self.bc.encode([SearchEngine.chinese_pattern.sub('',query_str)])[0]
         script_query = {
         "script_score": {
             "query": {"match_all": {}},
