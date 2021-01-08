@@ -4,6 +4,7 @@ from elasticsearch import helpers
 import time
 from config import mappings, files, query_template, pose_set, index_name
 from util import get_within_fixed
+from collections import defaultdict
 from bert_serving.client import BertClient
 import numpy as np
 import json
@@ -41,14 +42,14 @@ class SearchEngine:
 
     def read_sentence_log(self):
         '''
-        state:加载self.sentence_log对应的pickle 字典, 如果不存在则啥也不做
+        state:加载self.sentence_log对应的pickle 字典, 如果不存在创建一个空的defaultdict
         '''
         try:
             with open(self.sentence_log_path, 'rb') as f:
                 self.sentence_log = pkl.load(f)
         except:
             # 不需要创建, 如果需要写, 自然会写
-            pass
+            self.sentence_log = defaultdict(lambda:0)
 
     def write_sentence_log(self):
         '''
@@ -84,7 +85,7 @@ class SearchEngine:
         self.write_sentence_log()
         self.get_docs_num()
 
-    def index_file(self, file_name, start_line_number=1):
+    def index_file(self, file_name):
         '''
         处理一个新闻文件,
         argv:文件路径
@@ -93,6 +94,7 @@ class SearchEngine:
         '''
         begin_time = time.time()
         file_base_name=os.path.basename(file_name)
+        start_line_number = self.sentence_log["file_base_name"]+1
         with open(file_name) as f:
             print("Begin read {}".format(file_name))
             result = []
