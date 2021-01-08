@@ -241,7 +241,7 @@ class SearchEngine:
                 }
             }
         }
-        self.avgdl=self.es.search(body=query,size=0)["aggregations"]["avg_size"]["value"]
+        self.avgdl=self.es.search(index=self.index_name,body=query,size=0)["aggregations"]["avg_size"]["value"]
 
     def get_filter_query_res(self, query_str, is_strict):
         '''
@@ -256,6 +256,30 @@ class SearchEngine:
                 within = np.inf
             res_body = self.query_pos_filter(res_body, query_str, within=within, fix=fixed)
         return query_str, res_body
+    def get_embedding_query_res(self, query_str, max_num=10):
+        query_str, _, _ = get_within_fixed(query_str)
+        query_vector=self.bc.encode([SearchEngine.chinese_pattern.sub('',query_str)])
+        script_query = {
+        "script_score": {
+            "query": {"match_all": {}},
+            "script": {
+                "source": "cosineSimilarity(params.query_vector, doc['embedding']) + 1.0",
+                "params": {"query_vector": query_vector} # params这个字段应该是给script传参, 在source中(source也就是脚本代码内容)通过params.query_vector来引用
+                }
+            }
+        }
+
+        # search_start = time.time()
+        response = self.es.search(
+            index=self.index_name,
+            body={
+                "size": max_num,
+                "query": script_query
+            }
+        )
+        return response["hits"]["hits"]
+        # search_time = time.time() - search_start
+
 
 if __name__=='__main__':
     #%% 构建索引

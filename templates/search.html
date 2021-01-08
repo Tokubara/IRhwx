@@ -32,6 +32,11 @@
                 {% else %}
                     <input name='is_tf_idf' type='checkbox'>使用TF-IDF
                 {% endif %}
+                {% if is_embedding %}
+                    <input name='is_embedding' type='checkbox' checked>使用句向量
+                {% else %}
+                    <input name='is_embedding' type='checkbox'>使用句向量
+                {% endif %}
             </label>
         </div>
     </form>
