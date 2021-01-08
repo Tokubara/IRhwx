@@ -18,15 +18,15 @@ def index():
         query_str = request.form['keyword']
         old_query_str=query_str
         is_embedding=transfer_checkbox(request.form.get('is_embedding'))
+        is_strict = transfer_checkbox(request.form.get('is_strict'))
+        is_tf_idf=transfer_checkbox(request.form.get('is_tf_idf'))
         if is_embedding:
             res_obj = se.get_embedding_query_res(query_str, max_num=10)
-            res_body = [res_body[i]["_source"]["origin"] for i in res_obj]
-            score = [res_body[i]["_score"] for i in res_obj]
+            res_body = [item["_source"]["origin"] for item in res_obj]
+            score = [item["_score"] for item in res_obj]
             no_result = len(res_obj)==0
             return render_template('search.html', res_body=res_body, is_strict=is_strict, query_str=old_query_str, res_num=len(res_obj), is_tf_idf=is_tf_idf,no_result=no_result,score=score)
         else:
-            is_strict = transfer_checkbox(request.form.get('is_strict'))
-            is_tf_idf=transfer_checkbox(request.form.get('is_tf_idf'))
             query_str, res_body = se.get_filter_query_res(query_str, is_strict)
             res_num = len(res_body)
             no_result = res_num == 0
