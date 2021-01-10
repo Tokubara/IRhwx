@@ -95,11 +95,13 @@ class SearchEngine:
         '''
         begin_time = time.time()
         file_base_name=os.path.basename(file_name)
-        start_line_number = self.sentence_log["file_base_name"]+1
+        start_line_number = self.sentence_log[file_base_name]+1
         with open(file_name) as f:
             print("Begin read {}".format(file_name))
             result = []
-            for linenum, line in enumerate(f,start_line_number):
+            for linenum, line in enumerate(f,1):
+                if(linenum<start_line_number):
+                    continue
                 line = line.strip()
                 if line == '':
                     continue
@@ -257,7 +259,6 @@ class SearchEngine:
             res_body = self.query_pos_filter(res_body, query_str, within=within, fix=fixed)
         return query_str, res_body
     def get_embedding_query_res(self, query_str, max_num=10):
-        # import pdb;pdb.set_trace()
         query_str, _, _ = get_within_fixed(query_str)
         query_vector=self.bc.encode([SearchEngine.chinese_pattern.sub('',query_str)])[0]
         script_query = {
@@ -285,6 +286,5 @@ class SearchEngine:
 if __name__=='__main__':
     #%% 构建索引
     se = SearchEngine(index_name='embedding-index-0')
-    # for file in files:
-    #     se.index_file(file,max_line=1000,batch_num=1000)
-    # pdb.set_trace()
+    for file in files:
+        se.index_file(file,max_line=100000,batch_num=10000)

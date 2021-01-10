@@ -4,7 +4,7 @@ from flask import request
 from build_index import SearchEngine
 from config import app_index_name
 
-se = SearchEngine(index_name='embedding-index-0')
+se = SearchEngine(index_name=app_index_name)
 app = Flask(__name__)
 
 def transfer_checkbox(value):
