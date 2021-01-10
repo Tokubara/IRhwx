@@ -29,7 +29,7 @@ query_template = {
         }
     }
 
-files = ['tmp_output.txt'] # 分好词的文件
+files = ['tmp_output_1000.txt'] # 分好词的文件
 
 pose_set=("n","np","ns","ni","nz","m","q","mq","t","f","s","v","a","d","h","k","i","j","r","c","p","u","y","e","o","g","w","x") # 词性集合
 
